@@ -63,6 +63,8 @@ def generate_content(req: HttpRequest) -> HttpResponse:
         Generate content following the template while maintaining the brand voice and context.
         """
 
+        logging.info(f"Sending prompt to OpenAI: {prompt}")
+
         # Generate content using OpenAI
         response = openai.chat.completions.create(
             model="gpt-4",
@@ -75,6 +77,10 @@ def generate_content(req: HttpRequest) -> HttpResponse:
         )
 
         generated_content = response.choices[0].message.content
+        logging.info(f"Received response from OpenAI: {generated_content}")
+        logging.info(f"OpenAI response metadata: model={response.model}, "
+                    f"finish_reason={response.choices[0].finish_reason}, "
+                    f"total_tokens={response.usage.total_tokens}")
 
         # Save generated content to posts container
         posts_container = database.get_container_client(os.environ["COSMOS_DB_CONTAINER_POSTS"])
