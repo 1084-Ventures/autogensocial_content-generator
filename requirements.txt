@@ -6,3 +6,8 @@ azure-functions
 azure-cosmos
 azure-storage-blob
 openai
+pytz
+tenacity
+pytest
+pytest-asyncio
+python-dotenv
