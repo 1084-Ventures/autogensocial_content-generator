@@ -1,13 +1,9 @@
 # DO NOT include azure-functions-worker in this file
 # The Python Worker is managed by Azure Functions platform
-# Manually managing azure-functions-worker may cause unexpected issues
-
 azure-functions
-azure-cosmos
-azure-storage-blob
+azure-cosmos  # Still needed for local Cosmos DB operations
 openai
 pytz
-tenacity
 pytest
 pytest-asyncio
 python-dotenv

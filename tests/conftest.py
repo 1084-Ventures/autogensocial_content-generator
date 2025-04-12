@@ -8,6 +8,8 @@ from unittest.mock import MagicMock
 import os
 from openai.types.completion import Completion, Choice
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
+from blueprints.content_generation.logger import StructuredLogger
+import redis
 
 @pytest.fixture(autouse=True)
 def setup_test_env(monkeypatch):
@@ -18,6 +20,8 @@ def setup_test_env(monkeypatch):
     monkeypatch.setenv("COSMOS_DB_CONTAINER_TEMPLATE", "templates")
     monkeypatch.setenv("COSMOS_DB_CONTAINER_POSTS", "posts")
     monkeypatch.setenv("OPENAI_API_KEY", "mock_api_key")
+    monkeypatch.setenv("REDIS_CONNECTION_STRING", "redis://localhost:6379")
+    monkeypatch.setenv("KEY_VAULT_URL", "https://mock-keyvault.vault.azure.net/")
     
     # Configure OpenAI client
     openai.api_key = "mock_api_key"
@@ -141,3 +145,26 @@ def fixed_utc_now():
 
     with patch('datetime.datetime', MockDatetime):
         yield fixed_dt
+
+@pytest.fixture
+def structured_logger():
+    """Create a StructuredLogger instance with mocked logging."""
+    logger = StructuredLogger()
+    logger.logger = MagicMock()
+    return logger
+
+@pytest.fixture
+def mock_redis():
+    """Create a mock Redis client."""
+    with patch('redis.from_url') as mock_redis:
+        mock_client = MagicMock()
+        mock_redis.return_value = mock_client
+        yield mock_client
+
+@pytest.fixture
+def mock_key_vault():
+    """Create a mock Key Vault client."""
+    with patch('azure.keyvault.secrets.SecretClient') as mock_kv:
+        mock_client = MagicMock()
+        mock_kv.return_value = mock_client
+        yield mock_client

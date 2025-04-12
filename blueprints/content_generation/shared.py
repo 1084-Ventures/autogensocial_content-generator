@@ -12,6 +12,15 @@ VALID_CONTENT_TYPES = ['post', 'reel', 'carousel', 'story']
 
 _cosmos_client: Optional[CosmosClient] = None
 
+# Load settings from local.settings.json
+def load_settings():
+    with open('local.settings.json') as f:
+        settings = json.load(f)
+        return settings.get('Values', {})
+
+# Get settings once at module level
+settings = load_settings()
+
 def get_current_time_in_timezone(tz_str: str) -> datetime:
     """Get current time in specified timezone."""
     try:
@@ -55,6 +64,9 @@ def get_todays_post_count(posts_container, brand_id: str, template_id: str) -> i
 def generate_content_with_retry(prompt_settings: Dict[str, Any], system_prompt: str, user_prompt: str) -> Dict[str, Any]:
     """Generate content using OpenAI with retry logic."""
     try:
+        # Set OpenAI key from settings
+        openai.api_key = settings.get('OPENAI_API_KEY')
+        
         response = openai.chat.completions.create(
             model=prompt_settings.get('model', "gpt-4"),
             messages=[
@@ -67,8 +79,14 @@ def generate_content_with_retry(prompt_settings: Dict[str, Any], system_prompt: 
         )
         content = response.choices[0].message.content
         return json.loads(content) if isinstance(content, str) else content
-    except Exception as e:
+    except openai.APIError as e:
         logging.error(f"OpenAI API error: {str(e)}")
+        raise
+    except json.JSONDecodeError as e:
+        logging.error(f"Invalid JSON response from OpenAI: {str(e)}")
+        raise
+    except Exception as e:
+        logging.error(f"Unexpected error in content generation: {str(e)}")
         raise
 
 def validate_request(req_body: Dict[str, Any]) -> Tuple[bool, str]:
@@ -85,9 +103,7 @@ def init_cosmos_client() -> CosmosClient:
     """Initialize and return a Cosmos DB client."""
     global _cosmos_client
     if _cosmos_client is None:
-        _cosmos_client = CosmosClient.from_connection_string(
-            os.environ["COSMOS_DB_CONNECTION_STRING"]
-        )
+        _cosmos_client = CosmosClient.from_connection_string(settings.get('COSMOS_DB_CONNECTION_STRING'))
     return _cosmos_client
 
 def generate_content(req_body: Dict[str, Any], is_timer: bool = False) -> Tuple[Any, int, str]:
@@ -97,14 +113,14 @@ def generate_content(req_body: Dict[str, Any], is_timer: bool = False) -> Tuple[
         template_id = req_body['templateId']
         variable_values = req_body.get('variableValues', {})
 
-        # Initialize Cosmos DB client
+        # Initialize Cosmos DB client using settings
         cosmos_client = init_cosmos_client()
-        database = cosmos_client.get_database_client(os.environ["COSMOS_DB_NAME"])
+        database = cosmos_client.get_database_client(settings.get('COSMOS_DB_NAME'))
         
-        # Get brand and template data
-        brands_container = database.get_container_client(os.environ["COSMOS_DB_CONTAINER_BRAND"])
-        templates_container = database.get_container_client(os.environ["COSMOS_DB_CONTAINER_TEMPLATE"])
-        posts_container = database.get_container_client(os.environ["COSMOS_DB_CONTAINER_POSTS"])
+        # Get container clients using settings
+        brands_container = database.get_container_client(settings.get('COSMOS_DB_CONTAINER_BRAND'))
+        templates_container = database.get_container_client(settings.get('COSMOS_DB_CONTAINER_TEMPLATE'))
+        posts_container = database.get_container_client(settings.get('COSMOS_DB_CONTAINER_POSTS'))
 
         try:
             # Get brand details
@@ -134,7 +150,16 @@ def generate_content(req_body: Dict[str, Any], is_timer: bool = False) -> Tuple[
             template_info = template['templateInfo']
             template_settings = template['settings']
 
-            # Validate content type
+            # Validate required template settings
+            if not all(key in template_settings for key in ['promptTemplate', 'visualStyle', 'contentStrategy']):
+                return None, 400, "Template settings must include promptTemplate, visualStyle, and contentStrategy"
+
+            # Validate visual style
+            visual_style = template_settings.get('visualStyle', {})
+            if not visual_style:
+                return None, 400, "Template is missing visual style settings"
+
+            # Continue with existing validation
             content_type = template_info.get('contentType')
             if content_type not in VALID_CONTENT_TYPES:
                 return None, 400, f"Invalid content type: {content_type}. Must be one of: {', '.join(VALID_CONTENT_TYPES)}"
