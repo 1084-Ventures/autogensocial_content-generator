@@ -12,6 +12,10 @@ VALID_CONTENT_TYPES = ['post', 'reel', 'carousel', 'story']
 
 _cosmos_client: Optional[CosmosClient] = None
 
+def _normalize_content_type(content_type: str) -> str:
+    """Normalize content type to lowercase."""
+    return content_type.lower() if content_type else ''
+
 # Load settings from local.settings.json
 def load_settings():
     with open('local.settings.json') as f:
@@ -160,7 +164,7 @@ def generate_content(req_body: Dict[str, Any], is_timer: bool = False) -> Tuple[
                 return None, 400, "Template is missing visual style settings"
 
             # Continue with existing validation
-            content_type = template_info.get('contentType')
+            content_type = _normalize_content_type(template_info.get('contentType'))
             if content_type not in VALID_CONTENT_TYPES:
                 return None, 400, f"Invalid content type: {content_type}. Must be one of: {', '.join(VALID_CONTENT_TYPES)}"
 

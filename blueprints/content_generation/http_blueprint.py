@@ -20,12 +20,14 @@ blueprint = func.Blueprint()
 def validate_api_key(req: func.HttpRequest) -> Tuple[Optional[str], Optional[str]]:
     """Validate API key from request headers."""
     try:
-        api_key = req.headers.get('X-API-Key')
+        # Check headers using dict-style access with get() to handle missing headers
+        headers = dict(req.headers)
+        api_key = headers.get('x-api-key') or headers.get('x-functions-key')
         if not api_key:
             return None, None
             
         settings = shared.load_settings()
-        valid_api_key = settings.get('API_KEY')
+        valid_api_key = settings.get('FUNCTIONS_KEY')
         
         if api_key == valid_api_key:
             return api_key, 'api-user'
@@ -68,8 +70,8 @@ def generate_content_http(req: func.HttpRequest) -> func.HttpResponse:
         structured_logger.info("Processing request", user_id=user_id)
 
         # Check rate limit
-        remaining_requests = rate_limiter.rate_limiter.get_remaining_requests(user_id)
-        if not rate_limiter.rate_limiter.check_rate_limit(user_id):
+        remaining_requests = rate_limiter.get_remaining_requests(user_id)
+        if not rate_limiter.check_rate_limit(user_id):
             structured_logger.warning(
                 "Rate limit exceeded", 
                 user_id=user_id, 
