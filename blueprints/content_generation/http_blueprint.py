@@ -83,11 +83,23 @@ def generate_content_http(req: func.HttpRequest) -> func.HttpResponse:
                 {"remaining_requests": remaining_requests}
             )
 
+        # Validate request body is not empty
+        body = req.get_body()
+        if not body or len(body.strip()) == 0:
+            return create_error_response(
+                ErrorCode.INVALID_INPUT, 
+                "Request body cannot be empty"
+            )
+
         # Parse request body
         try:
             req_body = req.get_json()
-        except ValueError:
-            return create_error_response(ErrorCode.INVALID_INPUT, "Invalid JSON in request body")
+        except ValueError as e:
+            return create_error_response(
+                ErrorCode.INVALID_INPUT, 
+                "Invalid JSON in request body",
+                {"detail": str(e)}
+            )
 
         # Validate request
         is_valid, error = shared.validate_request(req_body)

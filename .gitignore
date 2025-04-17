@@ -95,6 +95,15 @@ celerybeat-schedule
 # SageMath parsed files
 *.sage.py
 
+# VSCode specific
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.vscode/ipch
+*.code-workspace
+
 # Environments
 .env
 .venv
@@ -103,6 +112,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+AzuriteConfig
 
 # Spyder project settings
 .spyderproject

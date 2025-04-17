@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timezone
 import pytz
 from typing import Dict, Any, Tuple, List, Optional
+from shared import structured_logger  # Add import for structured_logger
 
 VALID_CONTENT_TYPES = ['post', 'reel', 'carousel', 'story']
 
@@ -71,26 +72,69 @@ def generate_content_with_retry(prompt_settings: Dict[str, Any], system_prompt: 
         # Set OpenAI key from settings
         openai.api_key = settings.get('OPENAI_API_KEY')
         
+        # Ensure max_tokens is sufficient for carousel content
+        max_tokens = prompt_settings.get('maxTokens', 1000)
+        if 'carousel' in user_prompt.lower():
+            max_tokens = max(1500, max_tokens)  # Use at least 1500 tokens for carousel content
+        
+        structured_logger.info(
+            "Sending request to OpenAI",
+            model=prompt_settings.get('model', "gpt-4o"),
+            max_tokens=max_tokens,
+            temperature=prompt_settings.get('temperature', 0.7),
+            system_prompt_length=len(system_prompt),
+            user_prompt_length=len(user_prompt)
+        )
+        
         response = openai.chat.completions.create(
-            model=prompt_settings.get('model', "gpt-4"),
+            model=prompt_settings.get('model', "gpt-4o"),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=prompt_settings.get('maxTokens', 1000),
+            max_tokens=max_tokens,
             temperature=prompt_settings.get('temperature', 0.7),
             response_format={ "type": "json_object" }
         )
+
         content = response.choices[0].message.content
-        return json.loads(content) if isinstance(content, str) else content
+        structured_logger.info(
+            "Received response from OpenAI",
+            response_length=len(content) if content else 0,
+            raw_response=content
+        )
+
+        # Try to parse the JSON response
+        try:
+            parsed_content = json.loads(content) if isinstance(content, str) else content
+            structured_logger.info(
+                "Successfully parsed OpenAI response as JSON",
+                content_keys=list(parsed_content.keys()) if parsed_content else None
+            )
+            return parsed_content
+        except json.JSONDecodeError as e:
+            structured_logger.error(
+                "Failed to parse OpenAI response as JSON",
+                error=str(e),
+                error_location=f"line {e.lineno}, column {e.colno}",
+                raw_response=content,
+                doc=content[max(0, e.pos-50):e.pos+50] if content and e.pos else None
+            )
+            raise
+
     except openai.APIError as e:
-        logging.error(f"OpenAI API error: {str(e)}")
-        raise
-    except json.JSONDecodeError as e:
-        logging.error(f"Invalid JSON response from OpenAI: {str(e)}")
+        structured_logger.error(
+            "OpenAI API error",
+            error=str(e),
+            error_type=type(e).__name__
+        )
         raise
     except Exception as e:
-        logging.error(f"Unexpected error in content generation: {str(e)}")
+        structured_logger.error(
+            "Unexpected error in content generation",
+            error=str(e),
+            error_type=type(e).__name__
+        )
         raise
 
 def validate_request(req_body: Dict[str, Any]) -> Tuple[bool, str]:
@@ -106,8 +150,22 @@ def validate_request(req_body: Dict[str, Any]) -> Tuple[bool, str]:
 def init_cosmos_client() -> CosmosClient:
     """Initialize and return a Cosmos DB client."""
     global _cosmos_client
-    if _cosmos_client is None:
-        _cosmos_client = CosmosClient.from_connection_string(settings.get('COSMOS_DB_CONNECTION_STRING'))
+    if (_cosmos_client is None):
+        try:
+            conn_str = settings.get('COSMOS_DB_CONNECTION_STRING')
+            if not conn_str:
+                raise ValueError("COSMOS_DB_CONNECTION_STRING not found in settings")
+                
+            _cosmos_client = CosmosClient.from_connection_string(conn_str)
+            
+            # Verify connection by accessing the database
+            db_name = settings.get('COSMOS_DB_NAME')
+            _cosmos_client.get_database_client(db_name).read()
+            
+            structured_logger.info("Successfully connected to Cosmos DB")
+        except Exception as e:
+            structured_logger.error(f"Failed to initialize Cosmos DB client: {str(e)}")
+            raise
     return _cosmos_client
 
 def generate_content(req_body: Dict[str, Any], is_timer: bool = False) -> Tuple[Any, int, str]:
@@ -158,40 +216,53 @@ def generate_content(req_body: Dict[str, Any], is_timer: bool = False) -> Tuple[
             if not all(key in template_settings for key in ['promptTemplate', 'visualStyle', 'contentStrategy']):
                 return None, 400, "Template settings must include promptTemplate, visualStyle, and contentStrategy"
 
-            # Validate visual style
-            visual_style = template_settings.get('visualStyle', {})
-            if not visual_style:
-                return None, 400, "Template is missing visual style settings"
+            # Validate prompt template settings
+            prompt_settings = template_settings['promptTemplate']
+            if not all(key in prompt_settings for key in ['systemPrompt', 'userPrompt']):
+                return None, 400, "Template promptTemplate must include systemPrompt and userPrompt"
 
-            # Continue with existing validation
-            content_type = _normalize_content_type(template_info.get('contentType'))
-            if content_type not in VALID_CONTENT_TYPES:
-                return None, 400, f"Invalid content type: {content_type}. Must be one of: {', '.join(VALID_CONTENT_TYPES)}"
+            system_prompt = prompt_settings['systemPrompt']
+            user_prompt = prompt_settings['userPrompt']
 
-            # Extract template settings with proper validation
-            prompt_settings = template_settings.get('promptTemplate', {})
-            if not prompt_settings:
-                return None, 500, "Template is missing prompt settings"
+            if not system_prompt.strip() or not user_prompt.strip():
+                return None, 400, "System prompt and user prompt cannot be empty"
 
-            content_strategy = template_settings.get('contentStrategy', {})
-
-            # Validate and replace variables in the prompt
-            user_prompt = prompt_settings.get('userPrompt')
-            if not user_prompt:
-                return None, 500, "Template is missing user prompt"
-
+            # Process variables in the prompts
             if 'variables' in prompt_settings:
+                if not isinstance(prompt_settings['variables'], list):
+                    return None, 400, "Template variables must be an array"
+                
                 for variable in prompt_settings['variables']:
+                    if not isinstance(variable, dict):
+                        structured_logger.warning(
+                            "Invalid variable format in template",
+                            template_id=template_id,
+                            variable=variable
+                        )
+                        continue
+                    
                     var_name = variable.get('name')
                     if not var_name:
                         continue
-                    if var_name not in variable_values:
-                        return None, 400, f"Missing required variable: {var_name}"
-                    user_prompt = user_prompt.replace(f"{{{var_name}}}", str(variable_values[var_name]))
 
-            # Prepare system prompt with brand and content strategy context
+                    # Check if variable is required in either prompt
+                    var_placeholder = f"{{{var_name}}}"
+                    is_in_system = var_placeholder in system_prompt
+                    is_in_user = var_placeholder in user_prompt
+
+                    if (is_in_system or is_in_user) and var_name not in variable_values:
+                        return None, 400, f"Missing required variable: {var_name}"
+                    
+                    if var_name in variable_values:
+                        var_value = str(variable_values[var_name])
+                        system_prompt = system_prompt.replace(var_placeholder, var_value)
+                        user_prompt = user_prompt.replace(var_placeholder, var_value)
+
+            # Prepare the complete system prompt with brand and content strategy context
             brand_info = brand.get('brandInfo', {})
-            system_prompt = f"""
+            content_strategy = template_settings.get('contentStrategy', {})
+            
+            complete_system_prompt = f"""
             You are a professional content creator generating content in JSON format.
             
             Brand Context:
@@ -205,7 +276,7 @@ def generate_content(req_body: Dict[str, Any], is_timer: bool = False) -> Tuple[
             - Hashtag Strategy: {content_strategy.get('hashtagStrategy', '')}
             - Call to Action: {content_strategy.get('callToAction', '')}
 
-            {prompt_settings.get('systemPrompt', '')}
+            {system_prompt}
 
             Respond with a JSON object containing the generated content. Include:
             - mainText: The primary content text
@@ -214,10 +285,33 @@ def generate_content(req_body: Dict[str, Any], is_timer: bool = False) -> Tuple[
             - callToAction: The call to action text
             """
 
-            # Generate content using OpenAI
+            # Generate content using OpenAI with validated settings
             try:
-                generated_content = generate_content_with_retry(prompt_settings, system_prompt, user_prompt)
+                model = prompt_settings.get('model', "gpt-4")
+                max_tokens = prompt_settings.get('maxTokens', 1000)
+                temperature = prompt_settings.get('temperature', 0.7)
+                
+                logging.info(
+                    "Generating content with settings",
+                    extra={
+                        "model": model,
+                        "max_tokens": max_tokens,
+                        "temperature": temperature,
+                        "template_id": template_id
+                    }
+                )
+
+                generated_content = generate_content_with_retry(
+                    {
+                        "model": model,
+                        "maxTokens": max_tokens,
+                        "temperature": temperature
+                    },
+                    complete_system_prompt,
+                    user_prompt
+                )
             except openai.APIError as e:
+                logging.error(f"OpenAI API error: {str(e)}", extra={"template_id": template_id})
                 return None, 500, "Error generating content with AI model"
 
             # Create metadata following the spec
@@ -236,7 +330,7 @@ def generate_content(req_body: Dict[str, Any], is_timer: bool = False) -> Tuple[
                 "templateId": template_id,
                 "content": generated_content,
                 "status": "draft",
-                "contentType": content_type,
+                "contentType": _normalize_content_type(template_info.get('contentType')),
                 "variableValues": variable_values,
                 "generatedBy": "timer" if is_timer else "api"
             }
@@ -245,6 +339,7 @@ def generate_content(req_body: Dict[str, Any], is_timer: bool = False) -> Tuple[
                 created_post = posts_container.create_item(body=new_post)
                 return created_post, 201, None
             except cosmos_exceptions.CosmosHttpResponseError as e:
+                logging.error(f"Cosmos DB error: {str(e)}", extra={"template_id": template_id})
                 return None, 500, "Error saving generated content"
 
         except IndexError:
