@@ -2,7 +2,7 @@
 # The Python Worker is managed by Azure Functions platform
 azure-functions
 azure-cosmos>=4.5.1  # Still needed for local Cosmos DB operations
-openai>=1.6.1
+openai>=1.6.1,<2.0.0  # Specify upper bound for stability
 pytz
 pytest
 pytest-asyncio
@@ -11,3 +11,4 @@ redis
 azure-storage-blob
 azure-storage-queue
 requests
+structlog>=23.1.0  # Required for structured logging
