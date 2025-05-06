@@ -53,90 +53,102 @@ def create_error_response(error_code: ErrorCode, message: str = None, details: D
         status_code=status_code
     )
 
+def validate_and_parse_request(req: func.HttpRequest) -> Tuple[Optional[Dict[str, Any]], Optional[func.HttpResponse]]:
+    """Validate API key, rate limit, and parse the request body."""
+    # Validate API key
+    api_key, user_id = validate_api_key(req)
+    if not api_key:
+        structured_logger.warning("Unauthorized request attempt")
+        return None, create_error_response(ErrorCode.UNAUTHORIZED, "Valid API key required")
+
+    structured_logger.info("Processing request", user_id=user_id)
+
+    # Check rate limit
+    remaining_requests = rate_limiter.get_remaining_requests(user_id)
+    if not rate_limiter.check_rate_limit(user_id):
+        structured_logger.warning(
+            "Rate limit exceeded", 
+            user_id=user_id, 
+            remaining_requests=remaining_requests
+        )
+        return None, create_error_response(
+            ErrorCode.RATE_LIMIT_EXCEEDED,
+            f"Rate limit exceeded. Remaining requests: {remaining_requests}",
+            {"remaining_requests": remaining_requests}
+        )
+
+    # Validate request body is not empty
+    body = req.get_body()
+    if not body or len(body.strip()) == 0:
+        return None, create_error_response(
+            ErrorCode.INVALID_INPUT, 
+            "Request body cannot be empty"
+        )
+
+    # Parse request body
+    try:
+        req_body = req.get_json()
+    except ValueError as e:
+        return None, create_error_response(
+            ErrorCode.INVALID_INPUT, 
+            "Invalid JSON in request body",
+            {"detail": str(e)}
+        )
+
+    return req_body, None
+
+def process_content_generation(req_body: Dict[str, Any]) -> func.HttpResponse:
+    """Process content generation logic."""
+    # Validate request
+    is_valid, error = shared.validate_request(req_body)
+    if not is_valid:
+        structured_logger.warning("Invalid request", error=error)
+        return create_error_response(ErrorCode.VALIDATION_ERROR, error)
+
+    # Generate content
+    result, status_code, error = shared.generate_content(req_body)
+    if error:
+        error_mapping = {
+            404: ErrorCode.RESOURCE_NOT_FOUND,
+            400: ErrorCode.INVALID_INPUT,
+            500: ErrorCode.INTERNAL_ERROR
+        }
+        error_code = error_mapping.get(status_code, ErrorCode.INTERNAL_ERROR)
+        structured_logger.error(
+            "Error generating content", 
+            error=error, 
+            status_code=status_code
+        )
+        return create_error_response(error_code, error)
+
+    structured_logger.info(
+        "Content generated successfully",
+        template_id=req_body.get('templateId'),
+        brand_id=req_body.get('brandId')
+    )
+
+    response = func.HttpResponse(
+        json.dumps(result),
+        mimetype="application/json",
+        status_code=status_code
+    )
+    response.headers["X-RateLimit-Remaining"] = str(rate_limiter.get_remaining_requests(req_body.get('brandId')))
+    return response
+
 @blueprint.route(route="generate-content", methods=["POST"])
 @log_function_call(structured_logger)
 def generate_content_http(req: func.HttpRequest) -> func.HttpResponse:
     """HTTP trigger for content generation."""
     structured_logger.set_correlation_id()
     structured_logger.info('Content generation HTTP trigger function started')
-    
+
     try:
-        # Validate API key
-        api_key, user_id = validate_api_key(req)
-        if not api_key:
-            structured_logger.warning("Unauthorized request attempt")
-            return create_error_response(ErrorCode.UNAUTHORIZED, "Valid API key required")
+        req_body, error_response = validate_and_parse_request(req)
+        if error_response:
+            return error_response
 
-        structured_logger.info("Processing request", user_id=user_id)
+        return process_content_generation(req_body)
 
-        # Check rate limit
-        remaining_requests = rate_limiter.get_remaining_requests(user_id)
-        if not rate_limiter.check_rate_limit(user_id):
-            structured_logger.warning(
-                "Rate limit exceeded", 
-                user_id=user_id, 
-                remaining_requests=remaining_requests
-            )
-            return create_error_response(
-                ErrorCode.RATE_LIMIT_EXCEEDED,
-                f"Rate limit exceeded. Remaining requests: {remaining_requests}",
-                {"remaining_requests": remaining_requests}
-            )
-
-        # Validate request body is not empty
-        body = req.get_body()
-        if not body or len(body.strip()) == 0:
-            return create_error_response(
-                ErrorCode.INVALID_INPUT, 
-                "Request body cannot be empty"
-            )
-
-        # Parse request body
-        try:
-            req_body = req.get_json()
-        except ValueError as e:
-            return create_error_response(
-                ErrorCode.INVALID_INPUT, 
-                "Invalid JSON in request body",
-                {"detail": str(e)}
-            )
-
-        # Validate request
-        is_valid, error = shared.validate_request(req_body)
-        if not is_valid:
-            structured_logger.warning("Invalid request", error=error)
-            return create_error_response(ErrorCode.VALIDATION_ERROR, error)
-
-        # Generate content
-        result, status_code, error = shared.generate_content(req_body)
-        if error:
-            error_mapping = {
-                404: ErrorCode.RESOURCE_NOT_FOUND,
-                400: ErrorCode.INVALID_INPUT,
-                500: ErrorCode.INTERNAL_ERROR
-            }
-            error_code = error_mapping.get(status_code, ErrorCode.INTERNAL_ERROR)
-            structured_logger.error(
-                "Error generating content", 
-                error=error, 
-                status_code=status_code
-            )
-            return create_error_response(error_code, error)
-                
-        structured_logger.info(
-            "Content generated successfully",
-            template_id=req_body.get('templateId'),
-            brand_id=req_body.get('brandId')
-        )
-        
-        response = func.HttpResponse(
-            json.dumps(result),
-            mimetype="application/json",
-            status_code=status_code
-        )
-        response.headers["X-RateLimit-Remaining"] = str(remaining_requests)
-        return response
-            
     except Exception as e:
         structured_logger.error(
             "Unexpected error generating content",
@@ -144,6 +156,6 @@ def generate_content_http(req: func.HttpRequest) -> func.HttpResponse:
             error_type=type(e).__name__
         )
         return create_error_response(ErrorCode.INTERNAL_ERROR, "An unexpected error occurred")
-            
+
     finally:
         structured_logger.clear_correlation_id()
