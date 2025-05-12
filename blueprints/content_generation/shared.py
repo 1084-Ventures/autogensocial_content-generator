@@ -67,19 +67,25 @@ def get_todays_post_count(posts_container, brand_id: str, template_id: str) -> i
     return result[0]['count'] if result else 0
 
 def generate_content_with_retry(prompt_settings: Dict[str, Any], system_prompt: str, user_prompt: str) -> Dict[str, Any]:
-    """Generate content using OpenAI with retry logic."""
+    """Generate content using Azure OpenAI with retry logic."""
     try:
-        # Set OpenAI key from settings
-        openai.api_key = settings.get('OPENAI_API_KEY')
+        # Set Azure OpenAI credentials from settings
+        openai.api_type = "azure"
+        openai.api_base = settings.get('AZURE_OPENAI_ENDPOINT')
+        openai.api_version = settings.get('AZURE_OPENAI_API_VERSION')
+        openai.api_key = settings.get('AZURE_OPENAI_API_KEY')
         
         # Ensure max_tokens is sufficient for carousel content
         max_tokens = prompt_settings.get('maxTokens', 1000)
         if 'carousel' in user_prompt.lower():
             max_tokens = max(1500, max_tokens)  # Use at least 1500 tokens for carousel content
         
+        # Use Azure OpenAI deployment name from settings
+        deployment_name = settings.get('AZURE_OPENAI_DEPLOYMENT_NAME')
+        
         structured_logger.info(
-            "Sending request to OpenAI",
-            model=prompt_settings.get('model', "gpt-4o"),
+            "Sending request to Azure OpenAI",
+            model=deployment_name,
             max_tokens=max_tokens,
             temperature=prompt_settings.get('temperature', 0.7),
             system_prompt_length=len(system_prompt),
@@ -87,7 +93,7 @@ def generate_content_with_retry(prompt_settings: Dict[str, Any], system_prompt: 
         )
         
         response = openai.chat.completions.create(
-            model=prompt_settings.get('model', "gpt-4o"),
+            model=deployment_name,  # Use Azure deployment name
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
