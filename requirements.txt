@@ -1,8 +1,14 @@
 # DO NOT include azure-functions-worker in this file
 # The Python Worker is managed by Azure Functions platform
-# Manually managing azure-functions-worker may cause unexpected issues
-
 azure-functions
-azure-cosmos
+azure-cosmos>=4.5.1  # Still needed for local Cosmos DB operations
+openai>=1.6.1,<2.0.0  # Specify upper bound for stability
+pytz
+pytest
+pytest-asyncio
+python-dotenv
+redis
 azure-storage-blob
-openai
+azure-storage-queue
+requests
+structlog>=23.1.0  # Required for structured logging
