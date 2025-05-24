@@ -4,11 +4,10 @@ from datetime import datetime, timezone
 import openai
 import json
 import pytz
-from unittest.mock import MagicMock
 import os
 from openai.types.completion import Completion, Choice
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
-from blueprints.text_generation.logger import StructuredLogger
+from shared.logger import structured_logger, StructuredLogger
 import redis
 
 @pytest.fixture(autouse=True)
