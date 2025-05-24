@@ -7,17 +7,17 @@ from azure.functions import Blueprint
 text_generation_blueprint = Blueprint()
 
 @text_generation_blueprint.route(route="generate-text-content", methods=["POST"])
-def generate_text_content_endpoint(req: func.HttpRequest) -> func.HttpResponse:
+def generate_text_content(req: func.HttpRequest) -> func.HttpResponse:
     try:
         data = req.get_json()
         template = data.get("template")
         variable_values = data.get("variableValues", {})
-        content = generate_text_content(template, variable_values)
+        content = generate_text_content_logic(template, variable_values)
         return func.HttpResponse(json.dumps(content), status_code=200, mimetype="application/json")
     except Exception as e:
         return func.HttpResponse(json.dumps({"error": str(e)}), status_code=500, mimetype="application/json")
 
-def generate_text_content(template: dict, variable_values: dict) -> dict:
+def generate_text_content_logic(template: dict, variable_values: dict) -> dict:
     """
     Calls Azure OpenAI to generate content based on the template and variable values.
     Returns a dict with keys: text, comment, hashtags.
