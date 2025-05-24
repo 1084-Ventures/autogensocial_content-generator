@@ -91,7 +91,8 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
         image_url = None
         if image_bytes:
             try:
-                blob_conn_str = os.environ.get("AzureWebJobsStorage")
+                # Use PUBLIC_BLOB_CONNECTION_STRING for public images
+                blob_conn_str = os.environ.get("PUBLIC_BLOB_CONNECTION_STRING")
                 blob_service_client = BlobServiceClient.from_connection_string(blob_conn_str)
                 container_name = "public-images"
                 # Create container if not exists (no public access)
