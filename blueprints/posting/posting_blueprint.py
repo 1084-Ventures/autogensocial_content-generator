@@ -1,7 +1,7 @@
 import azure.functions as func
-from azure.functions.decorators import blueprint
+from azure.functions import Blueprint
 
-posting_blueprint = blueprint.Blueprint()
+posting_blueprint = Blueprint()
 
 # Example HTTP trigger for posting (stub)
 @posting_blueprint.route(route="/post-content", methods=["POST"])

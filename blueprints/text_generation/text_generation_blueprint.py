@@ -1,6 +1,21 @@
 import os
 import openai
 import json
+import azure.functions as func
+from azure.functions import Blueprint
+
+text_generation_blueprint = Blueprint()
+
+@text_generation_blueprint.route(route="generate-text-content", methods=["POST"])
+def generate_text_content_endpoint(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        data = req.get_json()
+        template = data.get("template")
+        variable_values = data.get("variableValues", {})
+        content = generate_text_content(template, variable_values)
+        return func.HttpResponse(json.dumps(content), status_code=200, mimetype="application/json")
+    except Exception as e:
+        return func.HttpResponse(json.dumps({"error": str(e)}), status_code=500, mimetype="application/json")
 
 def generate_text_content(template: dict, variable_values: dict) -> dict:
     """
@@ -29,18 +44,20 @@ def generate_text_content(template: dict, variable_values: dict) -> dict:
         {"role": "user", "content": user_prompt}
     ]
 
-    openai.api_type = "azure"
-    openai.api_base = endpoint
-    openai.api_key = api_key
-    openai.api_version = api_version
+    # Use OpenAI v1+ Azure client
+    client = openai.AzureOpenAI(
+        api_key=api_key,
+        api_version=api_version,
+        azure_endpoint=endpoint
+    )
 
-    response = openai.ChatCompletion.create(
-        engine=deployment,
+    response = client.chat.completions.create(
+        model=deployment,
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens
     )
-    content_json = response["choices"][0]["message"]["content"]
+    content_json = response.choices[0].message.content
     try:
         content = json.loads(content_json)
     except Exception:

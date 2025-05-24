@@ -1,5 +1,5 @@
 import azure.functions as func
-from azure.functions.decorators import blueprint
+from azure.functions.decorators import Blueprint
 import os
 import json
 from azure.cosmos import CosmosClient
@@ -7,9 +7,9 @@ from datetime import datetime
 from blueprints.text_generation.text_generation_blueprint import generate_text_content
 from shared.logger import structured_logger
 
-orchestrator_blueprint = blueprint.Blueprint()
+orchestrator_blueprint = Blueprint()
 
-@orchestrator_blueprint.route(route="/generate-content-orchestrator", methods=["POST"])
+@orchestrator_blueprint.route(route="generate-content-orchestrator", methods=["POST"])
 def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
     try:
         data = req.get_json()

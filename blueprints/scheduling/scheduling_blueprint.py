@@ -1,7 +1,7 @@
 import azure.functions as func
-from azure.functions.decorators import blueprint
+from azure.functions import Blueprint
 
-scheduling_blueprint = blueprint.Blueprint()
+scheduling_blueprint = Blueprint()
 
 # Example HTTP trigger for scheduling (stub)
 @scheduling_blueprint.route(route="/schedule-content", methods=["POST"])

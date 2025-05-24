@@ -1,7 +1,7 @@
 import azure.functions as func
-from azure.functions.decorators import blueprint
+from azure.functions import Blueprint
 
-image_generation_blueprint = blueprint.Blueprint()
+image_generation_blueprint = Blueprint()
 
 # Example HTTP trigger for image generation (stub)
 @image_generation_blueprint.route(route="/generate-image", methods=["POST"])
