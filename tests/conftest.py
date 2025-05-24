@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import os
 from openai.types.completion import Completion, Choice
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
-from blueprints.content_generation.logger import StructuredLogger
+from blueprints.text_generation.logger import StructuredLogger
 import redis
 
 @pytest.fixture(autouse=True)
