@@ -60,7 +60,8 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
         # Generate image using image_generation endpoint
         visual_style = settings.get("visualStyle", {})
         image_layout = settings.get("imageLayout", {})
-        image_gen_url = os.environ.get("IMAGE_GEN_URL", "http://localhost:7071/api/generate-image")
+        api_base_url = os.environ.get("API_BASE_URL", "http://localhost:7071/api")
+        image_gen_url = f"{api_base_url}/generate-image"
         # Only pass the 'text' field to the image generator, handling both 'text' and 'Text' keys
         image_text = None
         if isinstance(content, dict):
@@ -137,7 +138,7 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
         instagram_post_id = None
         post_status = None
         try:
-            posting_url = os.environ.get("POSTING_URL", "http://localhost:7071/api/post-content")
+            posting_url = f"{api_base_url}/post-content"
             post_payload = {
                 "brandId": brand_id,
                 "imageUrl": image_url,
