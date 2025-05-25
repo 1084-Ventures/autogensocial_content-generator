@@ -1,3 +1,3 @@
 #!/bin/bash
-$OryxPythonPath -m pip install playwright
-$OryxPythonPath -m playwright install chromium
+/usr/bin/python3.11 -m pip install playwright
+/usr/bin/python3.11 -m playwright install chromium
