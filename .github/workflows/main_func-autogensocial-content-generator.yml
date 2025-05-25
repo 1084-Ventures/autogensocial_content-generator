@@ -70,6 +70,12 @@ jobs:
       - name: Unzip artifact for deployment
         run: unzip release.zip     
         
+      - name: Set deployment environment variables
+        run: |
+          echo "scm-do-build-during-deployment=true" >> $GITHUB_ENV
+          echo "enable-oryx-build=true" >> $GITHUB_ENV
+          echo "AZURE_FUNCTIONAPP_PACKAGE_PATH=." >> $GITHUB_ENV
+
       - name: 'Deploy to Azure Functions'
         uses: Azure/functions-action@v1
         id: deploy-to-function
