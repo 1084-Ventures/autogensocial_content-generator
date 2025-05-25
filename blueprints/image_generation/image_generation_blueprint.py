@@ -2,26 +2,13 @@ import azure.functions as func
 from azure.functions import Blueprint
 import json
 from playwright.sync_api import sync_playwright
-import os
-import subprocess
 
 image_generation_blueprint = Blueprint()
-
-def ensure_playwright_browsers():
-    """Ensure Playwright browsers are installed at runtime (for Azure)."""
-    browser_path = os.path.expanduser("~/.cache/ms-playwright")
-    if not os.path.exists(browser_path) or not os.listdir(browser_path):
-        try:
-            subprocess.run(["playwright", "install", "chromium"], check=True)
-        except Exception as e:
-            # Log or handle install error if needed
-            pass
 
 # Example HTTP trigger for image generation (stub)
 @image_generation_blueprint.route(route="generate-image", methods=["POST"])
 def generate_image(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        ensure_playwright_browsers()
         data = req.get_json()
         text = data.get("text", "")
         visual_style = data.get("visualStyle", {})
