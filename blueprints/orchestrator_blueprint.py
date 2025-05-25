@@ -79,6 +79,7 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
             "imageLayout": image_layout
         }
         image_bytes = None
+        post_id = str(uuid.uuid4())  # Ensure post_id is always set
         try:
             resp = requests.post(image_gen_url, json=image_payload)
             if resp.status_code == 200:
@@ -101,7 +102,6 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
                     blob_service_client.create_container(container_name)
                 except Exception:
                     pass  # Container may already exist
-                post_id = str(uuid.uuid4())
                 blob_path = f"{user_id}/{brand_id}/{template_id}/{post_id}.png"
                 blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_path)
                 blob_client.upload_blob(image_bytes, overwrite=True, content_settings=ContentSettings(content_type="image/png"))
