@@ -36,7 +36,9 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
             font = ImageFont.load_default()
 
         # Draw the main text (centered)
-        text_width, text_height = draw.textsize(text, font=font)
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
         text_x = (width - text_width) // 2
         text_y = (height - text_height) // 2
         draw.text((text_x, text_y), text, fill=text_color, font=font)
@@ -44,7 +46,9 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
         # Draw box text if provided
         box_text = data.get("boxText", "")
         if box_text:
-            box_text_width, box_text_height = draw.textsize(box_text, font=font)
+            box_bbox = draw.textbbox((0, 0), box_text, font=font)
+            box_text_width = box_bbox[2] - box_bbox[0]
+            box_text_height = box_bbox[3] - box_bbox[1]
             box_text_x = (width - box_text_width) // 2
             box_text_y = height + (box_height - box_text_height) // 2
             draw.text((box_text_x, box_text_y), box_text, fill="#FFFFFF", font=font)
