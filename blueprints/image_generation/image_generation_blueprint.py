@@ -41,7 +41,19 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
         text_height = bbox[3] - bbox[1]
         text_x = (width - text_width) // 2
         text_y = (height - text_height) // 2
-        draw.text((text_x, text_y), text, fill=text_color, font=font)
+
+        # Outline parameters
+        outline_color = visual_style.get("outlineColor")
+        outline_width = visual_style.get("outlineWidth", 0)
+        # Draw main text with optional outline
+        draw.text(
+            (text_x, text_y),
+            text,
+            fill=text_color,
+            font=font,
+            stroke_width=outline_width if outline_color else 0,
+            stroke_fill=outline_color if outline_color else None
+        )
 
         # Draw box text if provided
         box_text = data.get("boxText", "")
@@ -51,7 +63,15 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
             box_text_height = box_bbox[3] - box_bbox[1]
             box_text_x = (width - box_text_width) // 2
             box_text_y = height + (box_height - box_text_height) // 2
-            draw.text((box_text_x, box_text_y), box_text, fill="#FFFFFF", font=font)
+            box_text_color = visual_style.get("boxTextColor", "#FFFFFF")
+            draw.text(
+                (box_text_x, box_text_y),
+                box_text,
+                fill=box_text_color,
+                font=font,
+                stroke_width=outline_width if outline_color else 0,
+                stroke_fill=outline_color if outline_color else None
+            )
 
         # Save to bytes
         img_bytes = io.BytesIO()
