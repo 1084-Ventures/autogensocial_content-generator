@@ -59,7 +59,7 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
 
         # Generate image using image_generation endpoint
         visual_style = settings.get("visualStyle", {})
-        image_layout = settings.get("imageLayout", {})
+        image = settings.get("image", {})
         api_base_url = os.environ.get("API_BASE_URL", "http://localhost:7071/api")
         image_gen_url = f"{api_base_url}/generate-image"
         # Only pass the 'text' field to the image generator, handling both 'text' and 'Text' keys
@@ -78,7 +78,7 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
         image_payload = {
             "text": image_text,
             "visualStyle": visual_style,
-            "imageLayout": image_layout,
+            "image": image,
             "boxText": box_text
         }
         image_bytes = None
