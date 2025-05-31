@@ -4,6 +4,7 @@ import json
 from PIL import Image, ImageDraw, ImageFont
 import io
 from shared.fonts import FONT_PATHS
+import textwrap
 
 image_generation_blueprint = Blueprint()
 
@@ -126,17 +127,35 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
                 font = ImageFont.truetype("arial.ttf", font_size)
         except Exception:
             font = ImageFont.load_default()
-        # Draw the main text (centered or aligned)
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
+        # --- Word wrapping logic ---
+        def wrap_text(text, font, max_width, draw):
+            words = text.split()
+            lines = []
+            current_line = ''
+            for word in words:
+                test_line = current_line + (' ' if current_line else '') + word
+                width = draw.textlength(test_line, font=font)
+                if width <= max_width:
+                    current_line = test_line
+                else:
+                    if current_line:
+                        lines.append(current_line)
+                    current_line = word
+            if current_line:
+                lines.append(current_line)
+            return lines
+        # Draw the main text (centered or aligned) with wrapping
+        max_text_width = width - 20  # 10px padding on each side
+        lines = wrap_text(text, font, max_text_width, draw)
+        line_height = font.getbbox('Ay')[3] - font.getbbox('Ay')[1]  # More accurate line height
+        total_text_height = line_height * len(lines)
         if text_align == "left":
             text_x = 10
         elif text_align == "right":
-            text_x = width - text_width - 10
+            text_x = width - max_text_width - 10
         else:
-            text_x = (width - text_width) // 2
-        text_y = (height - text_height) // 2
+            text_x = (width - max_text_width) // 2
+        text_y = (height - total_text_height) // 2
         # Draw box behind main text if textBox is provided
         text_box = data.get("textBox", {})
         if text_box:
@@ -153,9 +172,8 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
             box_rgba = hex_to_rgba(box_color, box_alpha)
             rect_x0 = text_x - box_padding
             rect_y0 = text_y - box_padding
-            rect_x1 = text_x + text_width + box_padding
-            rect_y1 = text_y + text_height + box_padding
-            # Draw filled rectangle
+            rect_x1 = text_x + max_text_width + box_padding
+            rect_y1 = text_y + total_text_height + box_padding
             draw.rectangle([rect_x0, rect_y0, rect_x1, rect_y1], fill=box_rgba)
             # Draw outline if specified
             if box_outline_color and box_outline_width > 0:
@@ -164,7 +182,7 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
                     draw.rectangle([
                         rect_x0 - i, rect_y0 - i, rect_x1 + i, rect_y1 + i
                     ], outline=outline_rgba)
-        # Draw main text with optional outline and alpha
+        # Draw main text with optional outline and alpha, line by line
         def hex_to_rgba(hex_color, alpha=255):
             hex_color = hex_color.lstrip('#')
             lv = len(hex_color)
@@ -175,14 +193,16 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
             rgba_outline_color = hex_to_rgba(outline_color, text_alpha)
         else:
             rgba_outline_color = None
-        draw.text(
-            (text_x, text_y),
-            text,
-            fill=rgba_text_color,
-            font=font,
-            stroke_width=outline_width if outline_color else 0,
-            stroke_fill=rgba_outline_color if outline_color else None
-        )
+        for i, line in enumerate(lines):
+            y = text_y + i * line_height
+            draw.text(
+                (text_x, y),
+                line,
+                fill=rgba_text_color,
+                font=font,
+                stroke_width=outline_width if outline_color else 0,
+                stroke_fill=rgba_outline_color if outline_color else None
+            )
         # Draw box text if provided
         if box_text:
             box_bbox = draw.textbbox((0, 0), box_text, font=font)
