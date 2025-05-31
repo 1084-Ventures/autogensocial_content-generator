@@ -75,11 +75,15 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
             image_text = str(content)
         # Add boxText for Pillow-based image generation
         box_text = settings.get("boxText", "")
+        # --- Advanced image generation payload ---
+        # Add support for textBox and pass all advanced options to image generator
+        text_box = settings.get("textBox", {})
         image_payload = {
             "text": image_text,
             "visualStyle": visual_style,
             "image": image,
-            "boxText": box_text
+            "boxText": box_text,
+            "textBox": text_box
         }
         image_bytes = None
         post_id = str(uuid.uuid4())  # Ensure post_id is always set
