@@ -127,7 +127,7 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
                 font = ImageFont.truetype("arial.ttf", font_size)
         except Exception:
             font = ImageFont.load_default()
-        # --- Word wrapping logic ---
+        # --- Improved word wrapping and alignment logic ---
         def wrap_text(text, font, max_width, draw):
             words = text.split()
             lines = []
@@ -144,17 +144,30 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
             if current_line:
                 lines.append(current_line)
             return lines
-        # Draw the main text (centered or aligned) with wrapping
+
+        def get_text_block_size(lines, font, draw):
+            line_heights = []
+            line_widths = []
+            for line in lines:
+                bbox = font.getbbox(line)
+                line_width = bbox[2] - bbox[0]
+                line_height = bbox[3] - bbox[1]
+                line_widths.append(draw.textlength(line, font=font))
+                line_heights.append(line_height)
+            total_height = sum(line_heights)
+            max_width = max(line_widths) if line_widths else 0
+            return max_width, total_height, line_heights
+
         max_text_width = width - 20  # 10px padding on each side
         lines = wrap_text(text, font, max_text_width, draw)
-        line_height = font.getbbox('Ay')[3] - font.getbbox('Ay')[1]  # More accurate line height
-        total_text_height = line_height * len(lines)
-        if text_align == "left":
-            text_x = 10
-        elif text_align == "right":
-            text_x = width - max_text_width - 10
-        else:
-            text_x = (width - max_text_width) // 2
+        text_block_width, total_text_height, line_heights = get_text_block_size(lines, font, draw)
+        # Optionally shrink font size if text block is too tall
+        min_font_size = 12
+        while total_text_height > height - 20 and font.size > min_font_size:
+            font = ImageFont.truetype(font.path, font.size - 2) if hasattr(font, 'path') else font.font_variant(size=font.size - 2)
+            lines = wrap_text(text, font, max_text_width, draw)
+            text_block_width, total_text_height, line_heights = get_text_block_size(lines, font, draw)
+        # Center text block vertically
         text_y = (height - total_text_height) // 2
         # Draw box behind main text if textBox is provided
         text_box = data.get("textBox", {})
@@ -170,19 +183,18 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
                 rgb = tuple(int(hex_color[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
                 return (*rgb, alpha)
             box_rgba = hex_to_rgba(box_color, box_alpha)
-            rect_x0 = text_x - box_padding
+            rect_x0 = (width - text_block_width) // 2 - box_padding
             rect_y0 = text_y - box_padding
-            rect_x1 = text_x + max_text_width + box_padding
+            rect_x1 = (width + text_block_width) // 2 + box_padding
             rect_y1 = text_y + total_text_height + box_padding
             draw.rectangle([rect_x0, rect_y0, rect_x1, rect_y1], fill=box_rgba)
-            # Draw outline if specified
             if box_outline_color and box_outline_width > 0:
                 outline_rgba = hex_to_rgba(box_outline_color, box_alpha)
                 for i in range(box_outline_width):
                     draw.rectangle([
                         rect_x0 - i, rect_y0 - i, rect_x1 + i, rect_y1 + i
                     ], outline=outline_rgba)
-        # Draw main text with optional outline and alpha, line by line
+        # Draw main text with improved alignment
         def hex_to_rgba(hex_color, alpha=255):
             hex_color = hex_color.lstrip('#')
             lv = len(hex_color)
@@ -193,8 +205,15 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
             rgba_outline_color = hex_to_rgba(outline_color, text_alpha)
         else:
             rgba_outline_color = None
+        y = text_y
         for i, line in enumerate(lines):
-            y = text_y + i * line_height
+            line_width = draw.textlength(line, font=font)
+            if text_align == "left":
+                text_x = 10
+            elif text_align == "right":
+                text_x = width - line_width - 10
+            else:  # center
+                text_x = (width - line_width) // 2
             draw.text(
                 (text_x, y),
                 line,
@@ -203,6 +222,7 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
                 stroke_width=outline_width if outline_color else 0,
                 stroke_fill=rgba_outline_color if outline_color else None
             )
+            y += line_heights[i]
         # Draw box text if provided
         if box_text:
             box_bbox = draw.textbbox((0, 0), box_text, font=font)
