@@ -34,17 +34,36 @@ def generate_image(req: func.HttpRequest) -> func.HttpResponse:
             if isinstance(background, str) and (background.startswith('http://') or background.startswith('https://')):
                 print(f"[ImageGen] Attempting to load background image from URL: {background}")
                 from urllib.request import urlopen
-                from PIL import Image as PILImage, ImageOps
+                from PIL import Image as PILImage, ImageOps, ImageFilter
                 try:
                     with urlopen(background) as response:
                         bg_img = PILImage.open(response).convert('RGBA')
                         bg_img = bg_img.resize((width, height), PILImage.LANCZOS)
-                        # Apply filter if specified
-                        filter_type = data.get('backgroundFilter')
-                        if filter_type == 'grayscale':
-                            bg_img = ImageOps.grayscale(bg_img).convert('RGBA')
+                        # Apply filters if specified
+                        filters = data.get('backgroundFilters', [])
+                        if isinstance(filters, str):
+                            filters = [filters]
+                        for filter_type in filters:
+                            if filter_type == 'grayscale':
+                                bg_img = ImageOps.grayscale(bg_img).convert('RGBA')
+                            elif filter_type == 'blur':
+                                bg_img = bg_img.filter(ImageFilter.GaussianBlur(radius=2))
+                            elif filter_type == 'contour':
+                                bg_img = bg_img.filter(ImageFilter.CONTOUR)
+                            elif filter_type == 'edge_enhance':
+                                bg_img = bg_img.filter(ImageFilter.EDGE_ENHANCE)
+                            elif filter_type == 'sharpen':
+                                bg_img = bg_img.filter(ImageFilter.SHARPEN)
+                            elif filter_type == 'emboss':
+                                bg_img = bg_img.filter(ImageFilter.EMBOSS)
+                            elif filter_type == 'invert':
+                                bg_img = ImageOps.invert(bg_img.convert('RGB')).convert('RGBA')
+                            elif filter_type == 'sepia':
+                                gray = ImageOps.grayscale(bg_img)
+                                sepia = ImageOps.colorize(gray, '#704214', '#C0C080')
+                                bg_img = sepia.convert('RGBA')
                         img = bg_img.copy()
-                        print(f"[ImageGen] Loaded and resized background image from URL.")
+                        print(f"[ImageGen] Loaded and resized background image from URL with filters: {filters}")
                 except Exception as e:
                     print(f"[ImageGen] Failed to load background image from URL: {e}")
                     bg_color = '#FFFFFF'

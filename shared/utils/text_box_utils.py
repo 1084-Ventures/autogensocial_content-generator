@@ -16,7 +16,7 @@ from shared.utils.font_utils import load_font
 
 
 def calculate_text_box(draw, text, font, container_width, container_height,
-                       container_padding=0, padding_ratio=0.2, min_font_size=10, visual_style=None, settings_path=None,
+                       container_padding=0, min_font_size=10, visual_style=None, settings_path=None,
                        max_box_width_pct=0.8, max_box_height_pct=0.8,
                        horizontal_align='center', vertical_align='middle'):
     """
@@ -31,24 +31,16 @@ def calculate_text_box(draw, text, font, container_width, container_height,
         container_width (int): Width of the container area (pixels).
         container_height (int): Height of the container area (pixels).
         container_padding (int): Padding inside the container (pixels).
-        padding_ratio (float): Fraction of text width/height used for box padding.
         min_font_size (int): Smallest font size to which text may shrink.
         visual_style (str): Optional visual style identifier for loading fonts.
         settings_path (str): Optional path to settings for loading fonts.
+        max_box_width_pct (float): Max width of box as percent of container (default 0.8).
+        max_box_height_pct (float): Max height of box as percent of container (default 0.8).
+        horizontal_align (str): 'left', 'center', or 'right'.
+        vertical_align (str): 'top', 'middle', or 'bottom'.
 
     Returns:
-        tuple:
-            wrapped_text (str): The final wrapped (and possibly truncated) text.
-            text_w (int): Width of the text (pixels, excluding padding).
-            text_h (int): Height of the text (pixels, excluding padding).
-            pad_x (int): Horizontal padding inside the box (pixels).
-            pad_y_top (int): Top padding inside the box (pixels).
-            pad_y_bottom (int): Bottom padding inside the box (pixels).
-            box_width (int): Total width of the box (text + padding).
-            box_height (int): Total height of the box (text + padding).
-            x (int): X-coordinate (pixels) for the top-left corner of the box.
-            y (int): Y-coordinate (pixels) for the top-left corner of the box.
-            font (PIL.ImageFont.FreeTypeFont): The final font (possibly resized).
+        dict: Box info and layout details.
 
     Notes:
         - The function first attempts to wrap lines so the box_width ≤ max_box_width.
@@ -70,24 +62,25 @@ def calculate_text_box(draw, text, font, container_width, container_height,
             bbox = draw.textbbox((0, 0), txt, font=fnt)
             w = bbox[2] - bbox[0]
             h = bbox[3] - bbox[1]
+            # Add descent to height to include letters like y/g/p
+            ascent, descent = fnt.getmetrics()
+            h += descent
         except AttributeError:
             w, h = fnt.getsize(txt)
-            h = ascent + descent
+            ascent, descent = fnt.getmetrics()
+            h += descent
         return w, h
 
     # Determine available space inside the container (now as a percentage)
-    max_box_width = int(container_width * max_box_width_pct)
-    max_box_height = int(container_height * max_box_height_pct)
-
-    # Calculate fixed 5% padding on all sides based on container size
-    pad_x = int(max_box_width * 0.05)
-    pad_y_top = pad_y_bottom = int(max_box_height * 0.05)
-    wrap_width = max_box_width - 2 * pad_x
+    available_width = container_width - 2 * container_padding
+    available_height = container_height - 2 * container_padding
+    max_box_width = available_width  # Use full available width, not a percentage
+    max_box_height = int(available_height * max_box_height_pct)
 
     # Calculate padding as a percentage of the text size (dynamic, but box cannot exceed container)
     def get_dynamic_padding(text_w, text_h):
-        pad_x = int(text_w * 0.05)
-        pad_y = int(text_h * 0.05)
+        pad_x = max(int(text_w * 0.05), 10)
+        pad_y = max(int(text_h * 0.05), 10)
         return pad_x, pad_y
 
     def wrap_text_to_width(text, font, max_width):
@@ -105,7 +98,7 @@ def calculate_text_box(draw, text, font, container_width, container_height,
                     w = bbox[2] - bbox[0]
                 except AttributeError:
                     w, _ = font.getsize(test_line)
-                if w <= max_box_width:  # initial wrap to container
+                if w <= max_width:
                     line = test_line
                 else:
                     lines.append(line)
@@ -114,11 +107,12 @@ def calculate_text_box(draw, text, font, container_width, container_height,
         return '\n'.join(lines)
 
     # Initial wrap to container width
-    wrapped_text = wrap_text_to_width(text, font, max_box_width)
+    wrapped_text = wrap_text_to_width(text, font, max_box_width - 2 * 10)
     text_w, text_h = measure(wrapped_text, font)
     pad_x, pad_y = get_dynamic_padding(text_w, text_h)
+    pad_y_top = pad_y_bottom = pad_y
     box_width = text_w + 2 * pad_x
-    box_height = text_h + 2 * pad_y
+    box_height = text_h + pad_y_top + pad_y_bottom
 
     # If box exceeds container, shrink padding and/or truncate
     if box_width > max_box_width:
@@ -155,12 +149,14 @@ def calculate_text_box(draw, text, font, container_width, container_height,
             box_height = text_h + 2 * pad_y
 
     # Calculate x position based on horizontal_align
+    available_width = container_width - 2 * container_padding
+    available_height = container_height - 2 * container_padding
     if horizontal_align == 'left':
         x = container_padding
     elif horizontal_align == 'right':
-        x = container_padding + max_box_width - box_width
+        x = container_padding + available_width - box_width
     else:  # center
-        x = container_padding + (max_box_width - box_width) // 2
+        x = container_padding + (available_width - box_width) // 2
     if x < container_padding:
         x = container_padding
 
@@ -168,9 +164,9 @@ def calculate_text_box(draw, text, font, container_width, container_height,
     if vertical_align == 'top':
         y = container_padding
     elif vertical_align == 'bottom':
-        y = container_padding + max_box_height - box_height
+        y = container_padding + available_height - box_height
     else:  # middle
-        y = container_padding + (max_box_height - box_height) // 2
+        y = container_padding + (available_height - box_height) // 2
     if y < container_padding:
         y = container_padding
 
@@ -201,8 +197,7 @@ def calculate_text_box(draw, text, font, container_width, container_height,
 
 
 def draw_text_box(image, text, font_path, initial_font_size, container_width,
-                  container_height, container_padding=0, padding_ratio=0.2,
-                  min_font_size=10, box_color=(0, 0, 0, 180), text_color=(255, 255, 255)):
+                  container_height, container_padding=0, min_font_size=10, box_color=(0, 0, 0, 180), text_color=(255, 255, 255)):
     """
     Draw a semi-transparent box behind the text and render wrapped/truncated text
     centered within the specified container area.
@@ -215,7 +210,6 @@ def draw_text_box(image, text, font_path, initial_font_size, container_width,
         container_width (int): Width of the container area (pixels).
         container_height (int): Height of the container area (pixels).
         container_padding (int): Padding inside the container (pixels).
-        padding_ratio (float): Fraction of text width/height used for box padding.
         min_font_size (int): Smallest font size to shrink to.
         box_color (tuple): RGBA color of the box background (e.g., semi-transparent).
         text_color (tuple): RGB color of the rendered text.
@@ -234,7 +228,6 @@ def draw_text_box(image, text, font_path, initial_font_size, container_width,
             container_width=img.width,
             container_height=img.height,
             container_padding=20,
-            padding_ratio=0.15,
             min_font_size=12,
             box_color=(0, 0, 0, 180),
             text_color=(255, 255, 255)
@@ -262,7 +255,6 @@ def draw_text_box(image, text, font_path, initial_font_size, container_width,
         container_width,
         container_height,
         container_padding,
-        padding_ratio,
         min_font_size
     )
 
