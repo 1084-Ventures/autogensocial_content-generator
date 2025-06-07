@@ -1,10 +1,12 @@
 import azure.functions as func
 from azure.functions import Blueprint
-import json
-from PIL import Image, ImageDraw, ImageFont
-import io
+from PIL import Image, ImageDraw
+from shared.utils.font_utils import load_font
+from shared.utils.text_box_utils import calculate_text_box
 from shared.fonts import FONT_PATHS
+from shared.models.image import ImageContent, VisualStyle, Font, Color
 import textwrap
+import io
 
 image_generation_blueprint = Blueprint()
 
@@ -12,236 +14,138 @@ image_generation_blueprint = Blueprint()
 def generate_image(req: func.HttpRequest) -> func.HttpResponse:
     try:
         data = req.get_json()
-        text = data.get("text", "")
-        visual_style = data.get("visualStyle", {})
-        image = data.get("image", {})
-        # Extract from new visualStyle structure
-        font = visual_style.get("font", {})
-        color = visual_style.get("color", {})
-        outline = visual_style.get("outline", {})
-        alignment = visual_style.get("alignment", {})
-        # Font
-        font_family = font.get("family", "Arial")
-        font_size = int(font.get("size", "32").replace("px", ""))
-        font_weight = font.get("weight", "normal")
-        font_style = font.get("style", "normal")
-        # Colors
-        text_color = color.get("text", "#000000")
-        bg_color = color.get("background", "#FFFFFF")
-        box_color = color.get("box", "#333333")
-        box_text_color = color.get("boxText", "#FFFFFF")
-        # Outline
-        outline_color = outline.get("color")
-        outline_width = outline.get("width", 0)
-        # Alignment
-        text_align = alignment.get("textAlign", "center")
-        # Transparency
-        text_alpha = int(color.get("textAlpha", 255))
-        # Image layout
-        width = image.get("container", {}).get("width", 800)
-        height = image.get("container", {}).get("height", 600)
-        box_height = 80
-        # Background image support
-        background_image_path = image.get("background")
+        # Simplified input fields
+        text = data.get('text', '')
+        visual_style = data.get('visualStyle', {})
+        container = data.get('container', {})
+        # Ensure container is a dict (not a string)
+        if not isinstance(container, dict):
+            print(f"[ImageGen] Warning: container is not a dict, got {type(container)}. Resetting to empty dict.")
+            container = {}
+        width = int(container.get('width', 1080))
+        height = int(container.get('height', 1080))
+        background = data.get('background', '#FFFFFF')
+        format_ = data.get('format', {'imageFormat': 'PNG'})
+
+        # Determine background type and create image
         img = None
-        if background_image_path:
-            try:
-                if background_image_path.startswith("http://") or background_image_path.startswith("https://"):
-                    import requests
-                    resp = requests.get(background_image_path)
-                    bg_img = Image.open(io.BytesIO(resp.content)).convert("RGB")
-                else:
-                    bg_img = Image.open(background_image_path).convert("RGB")
-                # Center the background image on the canvas without resizing
-                img = Image.new("RGB", (width, height), bg_color)
-                bg_w, bg_h = bg_img.size
-                x = (width - bg_w) // 2
-                y = (height - bg_h) // 2
-                img.paste(bg_img, (x, y))
-            except Exception as e:
-                img = Image.new("RGB", (width, height), bg_color)
-        else:
-            img = Image.new("RGB", (width, height), bg_color)
-        draw = ImageDraw.Draw(img, "RGBA")
-        # Draw the box below the image only if boxText is provided
-        box_text = data.get("boxText", "")
-        if box_text:
-            # Expand image to fit box
-            new_img = Image.new("RGB", (width, height + box_height), bg_color)
-            new_img.paste(img, (0, 0))
-            draw = ImageDraw.Draw(new_img, "RGBA")
-            draw.rectangle([0, height, width, height + box_height], fill=box_color)
-            img = new_img
-        # Load font using FONT_PATHS, supporting Azure Blob Storage with connection string
-        import os
-        from urllib.parse import unquote
-        # --- Font selection logic update ---
-        def get_font_url_from_paths(font_family, font_weight, font_style):
-            # Normalize style keys
-            style_key = "regular"
-            if font_weight == "bold" and font_style == "italic":
-                style_key = "bold_italic"
-            elif font_weight == "bold":
-                style_key = "bold"
-            elif font_style == "italic":
-                style_key = "italic"
-            # Get font entry from FONT_PATHS
-            font_entry = FONT_PATHS.get(font_family)
-            if isinstance(font_entry, dict):
-                # Try requested style
-                if style_key in font_entry:
-                    return font_entry[style_key]
-                # Fallbacks
-                if "regular" in font_entry:
-                    return font_entry["regular"]
-                # Any available style
-                for v in font_entry.values():
-                    return v
-            elif isinstance(font_entry, str):
-                return font_entry
-            return None
-
-        font_url = get_font_url_from_paths(font_family, font_weight, font_style)
+        bg_color = None
         try:
-            if font_url:
-                if font_url.startswith("http://") or font_url.startswith("https://"):
-                    from azure.storage.blob import BlobServiceClient
-                    from urllib.parse import urlparse
-                    parsed = urlparse(font_url)
-                    path_parts = parsed.path.lstrip('/').split('/', 1)
-                    container = path_parts[0]
-                    blob = unquote(path_parts[1])
-                    conn_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
-                    if not conn_str:
-                        raise Exception("AZURE_STORAGE_CONNECTION_STRING environment variable not set")
-                    blob_service_client = BlobServiceClient.from_connection_string(conn_str)
-                    blob_client = blob_service_client.get_blob_client(container=container, blob=blob)
-                    font_bytes = io.BytesIO()
-                    download_stream = blob_client.download_blob()
-                    font_bytes.write(download_stream.readall())
-                    font_bytes.seek(0)
-                    font = ImageFont.truetype(font_bytes, font_size)
-                else:
-                    font = ImageFont.truetype(font_url, font_size)
+            if isinstance(background, str) and (background.startswith('http://') or background.startswith('https://')):
+                print(f"[ImageGen] Attempting to load background image from URL: {background}")
+                from urllib.request import urlopen
+                from PIL import Image as PILImage, ImageOps
+                try:
+                    with urlopen(background) as response:
+                        bg_img = PILImage.open(response).convert('RGBA')
+                        bg_img = bg_img.resize((width, height), PILImage.LANCZOS)
+                        # Apply filter if specified
+                        filter_type = data.get('backgroundFilter')
+                        if filter_type == 'grayscale':
+                            bg_img = ImageOps.grayscale(bg_img).convert('RGBA')
+                        img = bg_img.copy()
+                        print(f"[ImageGen] Loaded and resized background image from URL.")
+                except Exception as e:
+                    print(f"[ImageGen] Failed to load background image from URL: {e}")
+                    bg_color = '#FFFFFF'
+            elif isinstance(background, str) and background.startswith('#'):
+                bg_color = background
             else:
-                font = ImageFont.truetype("arial.ttf", font_size)
-        except Exception:
-            font = ImageFont.load_default()
-        # --- Improved word wrapping and alignment logic ---
-        def wrap_text(text, font, max_width, draw):
-            words = text.split()
-            lines = []
-            current_line = ''
-            for word in words:
-                test_line = current_line + (' ' if current_line else '') + word
-                width = draw.textlength(test_line, font=font)
-                if width <= max_width:
-                    current_line = test_line
-                else:
-                    if current_line:
-                        lines.append(current_line)
-                    current_line = word
-            if current_line:
-                lines.append(current_line)
-            return lines
+                bg_color = background or '#FFFFFF'
+        except Exception as e:
+            print(f"[ImageGen] Exception in background processing: {e}")
+            bg_color = '#FFFFFF'
 
-        def get_text_block_size(lines, font, draw):
-            line_heights = []
-            line_widths = []
-            for line in lines:
-                bbox = font.getbbox(line)
-                line_width = bbox[2] - bbox[0]
-                line_height = bbox[3] - bbox[1]
-                line_widths.append(draw.textlength(line, font=font))
-                line_heights.append(line_height)
-            total_height = sum(line_heights)
-            max_width = max(line_widths) if line_widths else 0
-            return max_width, total_height, line_heights
+        if img is None:
+            # Fallback to color background (no transparency option)
+            if bg_color and bg_color.startswith('#'):
+                lv = len(bg_color) - 1
+                rgb = tuple(int(bg_color[i:i+lv//3], 16) for i in range(1, lv+1, lv//3))
+            else:
+                rgb = (255, 255, 255)
+            img = Image.new("RGBA", (width, height), rgb + (255,))
+            print(f"[ImageGen] Created color background: {rgb + (255,)}")
 
-        max_text_width = width - 20  # 10px padding on each side
-        lines = wrap_text(text, font, max_text_width, draw)
-        text_block_width, total_text_height, line_heights = get_text_block_size(lines, font, draw)
-        # Optionally shrink font size if text block is too tall
-        min_font_size = 12
-        while total_text_height > height - 20 and font.size > min_font_size:
-            font = ImageFont.truetype(font.path, font.size - 2) if hasattr(font, 'path') else font.font_variant(size=font.size - 2)
-            lines = wrap_text(text, font, max_text_width, draw)
-            text_block_width, total_text_height, line_heights = get_text_block_size(lines, font, draw)
-        # Center text block vertically
-        text_y = (height - total_text_height) // 2
-        # Draw box behind main text if textBox is provided
-        text_box = data.get("textBox", {})
-        if text_box:
-            box_color = text_box.get("color", "#FFFFFF")
-            box_alpha = int(text_box.get("alpha", 255))
-            box_outline_color = text_box.get("outlineColor")
-            box_outline_width = int(text_box.get("outlineWidth", 0))
-            box_padding = int(text_box.get("padding", 10))
-            def hex_to_rgba(hex_color, alpha=255):
-                hex_color = hex_color.lstrip('#')
-                lv = len(hex_color)
-                rgb = tuple(int(hex_color[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
-                return (*rgb, alpha)
-            box_rgba = hex_to_rgba(box_color, box_alpha)
-            rect_x0 = (width - text_block_width) // 2 - box_padding
-            rect_y0 = text_y - box_padding
-            rect_x1 = (width + text_block_width) // 2 + box_padding
-            rect_y1 = text_y + total_text_height + box_padding
-            draw.rectangle([rect_x0, rect_y0, rect_x1, rect_y1], fill=box_rgba)
-            if box_outline_color and box_outline_width > 0:
-                outline_rgba = hex_to_rgba(box_outline_color, box_alpha)
-                for i in range(box_outline_width):
-                    draw.rectangle([
-                        rect_x0 - i, rect_y0 - i, rect_x1 + i, rect_y1 + i
-                    ], outline=outline_rgba)
-        # Draw main text with improved alignment
-        def hex_to_rgba(hex_color, alpha=255):
-            hex_color = hex_color.lstrip('#')
-            lv = len(hex_color)
-            rgb = tuple(int(hex_color[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
-            return (*rgb, alpha)
-        rgba_text_color = hex_to_rgba(text_color, text_alpha)
-        if outline_color:
-            rgba_outline_color = hex_to_rgba(outline_color, text_alpha)
-        else:
-            rgba_outline_color = None
-        y = text_y
-        for i, line in enumerate(lines):
-            line_width = draw.textlength(line, font=font)
-            if text_align == "left":
-                text_x = 10
-            elif text_align == "right":
-                text_x = width - line_width - 10
-            else:  # center
-                text_x = (width - line_width) // 2
-            draw.text(
-                (text_x, y),
-                line,
-                fill=rgba_text_color,
-                font=font,
-                stroke_width=outline_width if outline_color else 0,
-                stroke_fill=rgba_outline_color if outline_color else None
-            )
-            y += line_heights[i]
-        # Draw box text if provided
-        if box_text:
-            box_bbox = draw.textbbox((0, 0), box_text, font=font)
-            box_text_width = box_bbox[2] - box_bbox[0]
-            box_text_height = box_bbox[3] - box_bbox[1]
-            box_text_x = (width - box_text_width) // 2
-            box_text_y = height + (box_height - box_text_height) // 2
-            draw.text(
-                (box_text_x, box_text_y),
-                box_text,
-                fill=box_text_color,
-                font=font,
-                stroke_width=outline_width if outline_color else 0,
-                stroke_fill=rgba_outline_color if outline_color else None
-            )
-        # Save to bytes
-        img_bytes = io.BytesIO()
-        img.save(img_bytes, format="PNG")
-        img_bytes.seek(0)
-        return func.HttpResponse(body=img_bytes.read(), mimetype="image/png", status_code=200)
+        draw = ImageDraw.Draw(img, "RGBA")
+
+        # Use shared font_utils to load font
+        font = load_font(visual_style)
+
+        # Text color
+        text_color = visual_style.get('color', '#000000')
+        # Outline
+        outline = visual_style.get('outline', {})
+        outline_color = outline.get('color', '#FF0000')
+        outline_width = int(outline.get('width', 1))
+        # Box color
+        box_color = visual_style.get('box', {}).get('color', '#000000')
+        box_alpha = int(visual_style.get('box', {}).get('alpha', 128))
+
+        # Calculate text box and wrapping using text_box_utils
+        container_padding = int(container.get('padding', 0))
+        # Use new dict-based API from calculate_text_box
+        box_info = calculate_text_box(
+            draw=draw,
+            text=text,
+            font=font,
+            container_width=width,
+            container_height=height,
+            container_padding=container_padding,
+            visual_style=visual_style,
+            horizontal_align=visual_style.get('horizontalAlign', 'center'),
+            vertical_align=visual_style.get('verticalAlign', 'middle')
+        )
+        print(f"[ImageGen] Box info: {box_info}")
+
+        # Use alignment/location from box_info only (no location override)
+        x = box_info['x']
+        y = box_info['y']
+        print(f"[ImageGen] Final box position: ({{x}}, {{y}}), text position: ({{x + box_info['pad_x']}}, {{y + box_info['pad_y_top']}})")
+
+        # Draw box
+        if box_color and box_alpha > 0:
+            # Draw the box on a separate transparent layer, then alpha-composite it
+            box_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            box_draw = ImageDraw.Draw(box_layer, "RGBA")
+            if box_color.startswith('#'):
+                lv = len(box_color) - 1
+                rgb = tuple(int(box_color[i:i+lv//3], 16) for i in range(1, lv+1, lv//3))
+            else:
+                rgb = (0, 0, 0)
+            box_rgba = rgb + (box_alpha,)
+            box_draw.rectangle([
+                x, y, x + box_info['box_width'], y + box_info['box_height']
+            ], fill=box_rgba)
+            img = Image.alpha_composite(img, box_layer)
+            draw = ImageDraw.Draw(img, "RGBA")  # Recreate draw for the new image
+            print(f"[ImageGen] Drew box with color: {box_rgba} using alpha composite")
+
+        # Draw outline
+        # Adjust text_x for alignment
+        if box_info['horizontal_align'] == 'center':
+            text_x = x + (box_info['box_width'] - box_info['text_w']) // 2
+        elif box_info['horizontal_align'] == 'right':
+            text_x = x + box_info['box_width'] - box_info['text_w'] - box_info['pad_x']
+        else:  # left
+            text_x = x + box_info['pad_x']
+        text_y = y + box_info['pad_y_top']
+        if outline_width > 0:
+            for ox in range(-outline_width, outline_width + 1):
+                for oy in range(-outline_width, outline_width + 1):
+                    if ox == 0 and oy == 0:
+                        continue
+                    draw.multiline_text((text_x + ox, text_y + oy), box_info['wrapped_text'], font=box_info['font'], fill=outline_color, align=box_info['horizontal_align'])
+            print(f"[ImageGen] Drew outline with color: {outline_color}, width: {outline_width}")
+        draw.multiline_text((text_x, text_y), box_info['wrapped_text'], font=box_info['font'], fill=text_color, align=box_info['horizontal_align'])
+        print(f"[ImageGen] Drew text at: ({{text_x}}, {{text_y}}) with color: {{text_color}} and align: {{box_info['horizontal_align']}}")
+
+        buf = io.BytesIO()
+        img.save(buf, format=format_.get('imageFormat', 'PNG'))
+        buf.seek(0)
+        print(f"[ImageGen] Image saved to buffer, returning response.")
+        return func.HttpResponse(buf.getvalue(), mimetype="image/png")
     except Exception as e:
-        return func.HttpResponse(json.dumps({"error": str(e)}), status_code=500, mimetype="application/json")
+        import traceback
+        print(f"[ImageGen] Exception occurred: {e}")
+        traceback.print_exc()
+        return func.HttpResponse(f"Error: {str(e)}", status_code=500)

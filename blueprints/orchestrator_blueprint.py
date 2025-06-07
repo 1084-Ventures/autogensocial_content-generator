@@ -10,6 +10,7 @@ import random
 import requests
 from azure.storage.blob import BlobServiceClient, ContentSettings
 import uuid
+from shared.models.orchestrator import OrchestratorRequest, OrchestratorResponse
 
 orchestrator_blueprint = Blueprint()
 
@@ -17,9 +18,10 @@ orchestrator_blueprint = Blueprint()
 def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
     try:
         data = req.get_json()
-        template_id = data.get("templateId")
-        variable_values = data.get("variableValues", {})
-        brand_id = data.get("brandId")
+        orchestrator_request = OrchestratorRequest(**data)
+        template_id = orchestrator_request.templateId
+        variable_values = orchestrator_request.variableValues or {}
+        brand_id = orchestrator_request.brandId
         user_id = req.headers.get("X-API-Key", "anonymous")
 
         # Cosmos DB setup
@@ -59,6 +61,14 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
 
         # Generate image using image_generation endpoint
         visual_style = settings.get("visualStyle", {})
+        # If visualStyle has a 'themes' array, pick a random theme
+        if (
+            isinstance(visual_style, dict)
+            and "themes" in visual_style
+            and isinstance(visual_style["themes"], list)
+            and visual_style["themes"]
+        ):
+            visual_style = random.choice(visual_style["themes"])
         image = settings.get("image", {})
         api_base_url = os.environ.get("API_BASE_URL", "http://localhost:7071/api")
         image_gen_url = f"{api_base_url}/generate-image"
