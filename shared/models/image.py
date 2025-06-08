@@ -19,12 +19,16 @@ class Outline(BaseModel):
 class Alignment(BaseModel):
     textAlign: Optional[str] = None  # left, center, right
 
+class Box(BaseModel):
+    color: Optional[str] = None  # e.g., "#000000"
+    alpha: Optional[int] = None  # 0-255
+
 class VisualStyle(BaseModel):
     font: Font
     color: Color
     outline: Optional[Outline] = None
     alignment: Optional[Alignment] = None
-    box: Optional[dict] = None
+    box: Optional[Box] = None
 
 class Container(BaseModel):
     width: Optional[int] = None
