@@ -59,8 +59,26 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
         # Use the randomly selected variable values if present
         content = generate_text_content_logic(template, variable_values_random or variable_values)
 
-        # Generate image using image_generation endpoint
+        # --- Media Search Integration for Images ---
         visual_style = settings.get("visualStyle", {})
+        content_type = template_db.get("templateInfo", {}).get("contentType", "text")
+        image_url_for_generation = None
+        if content_type == "image":
+            # Try to get a relevant image from media_search
+            try:
+                api_base_url = os.environ.get("API_BASE_URL", "http://localhost:7071/api")
+                media_search_url = f"{api_base_url}/media-search"
+                # Use the text content as the search query
+                search_query = content["text"] if isinstance(content, dict) and "text" in content else str(content)
+                resp = requests.post(media_search_url, json={"query": search_query, "brandId": brand_id})
+                if resp.status_code == 200:
+                    media_result = resp.json()
+                    # Assume media_result["url"] is the best image URL
+                    image_url_for_generation = media_result.get("url")
+            except Exception as e:
+                structured_logger.error("Media search failed", error=str(e))
+
+        # --- Image Generation ---
         # If visualStyle has a 'themes' array, pick a random theme
         if (
             isinstance(visual_style, dict)
@@ -83,10 +101,7 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
                 image_text = str(content)
         else:
             image_text = str(content)
-        # Add boxText for Pillow-based image generation
         box_text = settings.get("boxText", "")
-        # --- Advanced image generation payload ---
-        # Add support for textBox and pass all advanced options to image generator
         text_box = settings.get("textBox", {})
         image_payload = {
             "text": image_text,
@@ -95,6 +110,9 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
             "boxText": box_text,
             "textBox": text_box
         }
+        # If we have a media_search image, add it to the payload
+        if image_url_for_generation:
+            image_payload["mediaUrl"] = image_url_for_generation
         image_bytes = None
         post_id = str(uuid.uuid4())  # Ensure post_id is always set
         try:
@@ -110,11 +128,9 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
         image_url = None
         if image_bytes:
             try:
-                # Use PUBLIC_BLOB_CONNECTION_STRING for public images
                 blob_conn_str = os.environ.get("PUBLIC_BLOB_CONNECTION_STRING")
                 blob_service_client = BlobServiceClient.from_connection_string(blob_conn_str)
                 container_name = "public-images"
-                # Create container if not exists (no public access)
                 try:
                     blob_service_client.create_container(container_name)
                 except Exception:
@@ -122,7 +138,6 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
                 blob_path = f"{user_id}/{brand_id}/{template_id}/{post_id}.png"
                 blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_path)
                 blob_client.upload_blob(image_bytes, overwrite=True, content_settings=ContentSettings(content_type="image/png"))
-                # Build blob URL
                 account_url = blob_service_client.url.rstrip('/')
                 container_name_clean = container_name.strip('/')
                 blob_path_clean = blob_path.lstrip('/')
@@ -132,7 +147,6 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
                 image_url = None
 
         # Write to Cosmos DB (posts container)
-        # Use the same UUID post_id as above
         post_doc = {
             "id": post_id,
             "brandId": brand_id,
@@ -150,7 +164,6 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
         structured_logger.info("Content written to Cosmos DB", post_id=post_id)
 
         # --- Instagram Posting Logic moved to posting_blueprint ---
-        # Call posting_blueprint endpoint to post to Instagram
         instagram_post_result = None
         instagram_post_id = None
         post_status = None
@@ -202,6 +215,8 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
             response_body["instagramPostId"] = instagram_post_id
         if post_status:
             response_body["postStatus"] = post_status
+        if image_url_for_generation:
+            response_body["mediaSearchImageUrl"] = image_url_for_generation
 
         return func.HttpResponse(json.dumps(response_body), status_code=201, mimetype="application/json")
     except Exception as e:

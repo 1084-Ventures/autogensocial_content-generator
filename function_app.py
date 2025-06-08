@@ -13,4 +13,5 @@ app.register_blueprint(orchestrator_blueprint)
 app.register_blueprint(image_generation_blueprint)
 app.register_blueprint(posting_blueprint)
 app.register_blueprint(media_search_blueprint)
+# Cosmos DB and queue triggers are discovered automatically in v2 model, but import ensures registration in some environments
 

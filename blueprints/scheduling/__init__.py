@@ -1,1 +1,1 @@
-# Scheduling blueprint package
+# Scheduling package
