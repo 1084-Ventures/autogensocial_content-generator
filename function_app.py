@@ -1,5 +1,5 @@
 import azure.functions as func
-from blueprints.text_generation.text_generation_blueprint import text_generation_blueprint
+from blueprints.azure_openai_content_generation.azure_openai_content_generation_blueprint import text_generation_blueprint
 from blueprints.orchestrator_blueprint import orchestrator_blueprint
 from blueprints.image_generation.image_generation_blueprint import image_generation_blueprint
 from blueprints.posting.posting_blueprint import posting_blueprint

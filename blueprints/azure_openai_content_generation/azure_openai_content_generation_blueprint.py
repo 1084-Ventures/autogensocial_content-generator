@@ -3,7 +3,7 @@ import openai
 import json
 import azure.functions as func
 from azure.functions import Blueprint
-from generated_models.models import GenerateTextContentRequest, GenerateTextContentResponse
+from generated_models.models import AzureOpenAIGenerateContentRequest, AzureOpenAIGenerateContentResponse
 
 text_generation_blueprint = Blueprint()
 
@@ -11,8 +11,8 @@ text_generation_blueprint = Blueprint()
 def generate_text_content(req: func.HttpRequest) -> func.HttpResponse:
     try:
         data = req.get_json()
-        text_content_request = GenerateTextContentRequest(**data)
-        content = generate_text_content_logic(text_content_request.template, text_content_request.variable_values or {})
+        text_content_request = AzureOpenAIGenerateContentRequest(**data)
+        content = generate_text_content_logic(text_content_request.template, text_content_request.variableValues or {})
         return func.HttpResponse(json.dumps(content), status_code=200, mimetype="application/json")
     except Exception as e:
         return func.HttpResponse(json.dumps({"error": str(e)}), status_code=500, mimetype="application/json")

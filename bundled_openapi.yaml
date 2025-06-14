@@ -112,38 +112,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responses/NotFound/content/application~1json/schema'
-  /generate-text-content:
+  /generate-content:
     post:
-      operationId: generateTextContent
-      summary: Generate text content
-      description: Generates text content based on a template and variable values.
+      operationId: generateContent
+      summary: 'Generate content (text, image description, commentary, hashtags)'
+      description: Generates content using Azure OpenAI based on a template and variable values.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - template
-              properties:
-                template:
-                  type: object
-                  description: Template object for text generation
-                variableValues:
-                  type: object
-                  description: Variable values for the template
-                  additionalProperties:
-                    type: string
+              $ref: '#/components/schemas/AzureOpenAIGenerateContentRequest'
       responses:
         '200':
-          description: Text content generated successfully
+          description: Content generated successfully
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  text:
-                    type: string
+                $ref: '#/components/schemas/AzureOpenAIGenerateContentResponse'
         '400':
           description: Invalid request parameters
           content:
@@ -1587,5 +1573,240 @@ components:
               items:
                 type: string
               maxItems: 3
+    AzureOpenAIGenerateContentTemplate:
+      type: object
+      description: Schema for the template object used in content generation
+      properties:
+        name:
+          type: string
+          description: Name of the template
+        content:
+          type: string
+          description: Content or structure of the template
+      required:
+        - name
+        - content
+    AzureOpenAIGenerateContentRequest:
+      type: object
+      description: Request to generate content using Azure OpenAI
+      required:
+        - template
+      properties:
+        template:
+          $ref: '#/components/schemas/AzureOpenAIGenerateContentTemplate'
+          description: Template object for content generation
+        variableValues:
+          type: object
+          description: Variable values for the template
+          additionalProperties:
+            type: string
+    AzureOpenAIGenerateContentResponse:
+      type: object
+      description: Response containing generated content from Azure OpenAI
+      properties:
+        text:
+          type: string
+          description: The generated text content
+        imageDescription:
+          type: string
+          description: Description of the type of image to generate (if any)
+        commentary:
+          type: string
+          description: Additional commentary for the post
+        hashtags:
+          type: array
+          items:
+            type: string
+          description: List of hashtags for the post
+    OrchestratorRequest:
+      type: object
+      properties:
+        operation:
+          type: string
+          description: The operation to perform
+        payload:
+          type: object
+          description: The payload for the operation
+          additionalProperties: true
+      required:
+        - operation
+        - payload
+    OrchestratorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          description: The status of the operation
+        result:
+          type: object
+          description: The result of the operation
+          additionalProperties: true
+        error:
+          type: string
+          description: Error message if the operation failed
+      required:
+        - status
+    PostingRequest:
+      type: object
+      properties:
+        brand_id:
+          type: string
+          description: The brand ID
+        image_url:
+          type: string
+          description: The image URL
+        content:
+          type: string
+          description: The post content
+        post_id:
+          type: string
+          description: The post ID
+      required:
+        - brand_id
+        - image_url
+        - content
+        - post_id
+    PostingResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          description: The status of the post operation
+        post_url:
+          type: string
+          description: The URL of the posted content
+        error:
+          type: string
+          description: Error message if the operation failed
+      required:
+        - status
+    ImageContent:
+      type: object
+      properties:
+        url:
+          type: string
+          description: The URL of the image
+        width:
+          type: integer
+          description: The width of the image in pixels
+        height:
+          type: integer
+          description: The height of the image in pixels
+        alt_text:
+          type: string
+          description: Alt text for the image
+      required:
+        - url
+        - width
+        - height
+    Background:
+      type: object
+      properties:
+        type:
+          type: string
+          description: 'The type of background (e.g., color, image)'
+        value:
+          type: string
+          description: 'The value for the background (e.g., color code or image URL)'
+        filters:
+          type: array
+          items:
+            type: string
+          description: Optional filters to apply to the background
+      required:
+        - type
+        - value
+    TextOverlay:
+      type: object
+      properties:
+        text:
+          type: string
+          description: The text to overlay on the image
+        font:
+          type: object
+          required:
+            - family
+            - size
+          properties:
+            family:
+              type: string
+              description: 'Font family for the overlay text (e.g., Arial).'
+            size:
+              type: string
+              description: 'Font size (e.g., "32px").'
+            weight:
+              type: string
+              enum:
+                - normal
+                - bold
+              description: Font weight for the overlay text.
+            style:
+              type: string
+              enum:
+                - normal
+                - italic
+              description: Font style for the overlay text.
+        color:
+          type: object
+          required:
+            - text
+            - background
+          properties:
+            text:
+              type: string
+              description: 'Color for the overlay text (e.g., "#000000").'
+            background:
+              type: string
+              description: 'Background color for the overlay area (e.g., "#FFFFFF").'
+            box:
+              type: string
+              description: 'Color of the text box background (e.g., "#000000").'
+            outline:
+              type: string
+              description: Color for text outline (if supported).
+        position:
+          type: object
+          properties:
+            x:
+              type: integer
+            'y':
+              type: integer
+          required:
+            - x
+            - 'y'
+          description: The position of the text overlay
+      required:
+        - text
+        - font
+        - color
+        - position
+    MediaSearchRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          description: The text to search for related media
+        source:
+          type: string
+          description: 'The source to search (e.g., ''internal'', ''online'')'
+          default: internal
+      required:
+        - text
+    MediaSearchResponse:
+      type: object
+      properties:
+        media:
+          type: object
+          description: The best match media result
+          additionalProperties: true
+        source:
+          type: string
+          description: The source of the media
+        error:
+          type: string
+          description: Error message if the search failed
+      required:
+        - media
+        - source
 security:
   - bearerAuth: []

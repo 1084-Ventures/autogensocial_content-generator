@@ -4,7 +4,7 @@ import os
 import json
 from azure.cosmos import CosmosClient
 from datetime import datetime
-from blueprints.text_generation.text_generation_blueprint import generate_text_content_logic
+from blueprints.azure_openai_content_generation.azure_openai_content_generation_blueprint import generate_text_content_logic
 from shared.logger import structured_logger
 import random
 import requests
@@ -34,9 +34,22 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
         templates_container = db.get_container_client(container_templates)
         posts_container = db.get_container_client(container_posts)
 
-        # Fetch template from Cosmos DB
+        # Debug: List all template IDs for this brandId (partition key)
         try:
-            template_db = templates_container.read_item(item=template_id, partition_key=template_id)
+            query = "SELECT c.id, c.templateInfo.brandId FROM c WHERE c.templateInfo.brandId = @brandId"
+            items = list(templates_container.query_items(
+                query=query,
+                parameters=[{"name": "@brandId", "value": brand_id}],
+                enable_cross_partition_query=True
+            ))
+            template_ids = [item["id"] for item in items]
+            structured_logger.info("Templates found for brandId", brand_id=brand_id, template_ids=template_ids)
+        except Exception as debug_e:
+            structured_logger.error("Debug query failed", error=str(debug_e), brand_id=brand_id)
+
+        # Fetch template from Cosmos DB (partition key is templateInfo.brandId)
+        try:
+            template_db = templates_container.read_item(item=template_id, partition_key=brand_id)
         except Exception as e:
             structured_logger.error("Template not found", error=str(e), template_id=template_id)
             return func.HttpResponse(json.dumps({"error": f"Template with id {template_id} not found."}), status_code=404, mimetype="application/json")
