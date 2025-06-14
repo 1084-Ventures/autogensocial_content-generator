@@ -10,7 +10,7 @@ import random
 import requests
 from azure.storage.blob import BlobServiceClient, ContentSettings
 import uuid
-from shared.models.orchestrator import OrchestratorRequest, OrchestratorResponse
+from generated_models.models import OrchestratorRequest, OrchestratorResponse
 
 orchestrator_blueprint = Blueprint()
 
@@ -19,9 +19,9 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
     try:
         data = req.get_json()
         orchestrator_request = OrchestratorRequest(**data)
-        template_id = orchestrator_request.templateId
-        variable_values = orchestrator_request.variableValues or {}
-        brand_id = orchestrator_request.brandId
+        template_id = orchestrator_request.template_id
+        variable_values = orchestrator_request.variable_values or {}
+        brand_id = orchestrator_request.brand_id
         user_id = req.headers.get("X-API-Key", "anonymous")
 
         # Cosmos DB setup
@@ -43,7 +43,7 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
 
         # Extract only the required fields for text generation
         settings = template_db.get("settings", {})
-        prompt_template = settings.get("promptTemplate", {})
+        prompt_template = settings.get("prompt_template", {})
         variable_values_random = {}
         # Randomly select one value for each variable, if variables exist
         variables = prompt_template.pop("variables", None)

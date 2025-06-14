@@ -3,7 +3,7 @@ import openai
 import json
 import azure.functions as func
 from azure.functions import Blueprint
-from shared.models.text_content import GenerateTextContentRequest, GenerateTextContentResponse
+from generated_models.models import GenerateTextContentRequest, GenerateTextContentResponse
 
 text_generation_blueprint = Blueprint()
 
@@ -12,7 +12,7 @@ def generate_text_content(req: func.HttpRequest) -> func.HttpResponse:
     try:
         data = req.get_json()
         text_content_request = GenerateTextContentRequest(**data)
-        content = generate_text_content_logic(text_content_request.template, text_content_request.variableValues or {})
+        content = generate_text_content_logic(text_content_request.template, text_content_request.variable_values or {})
         return func.HttpResponse(json.dumps(content), status_code=200, mimetype="application/json")
     except Exception as e:
         return func.HttpResponse(json.dumps({"error": str(e)}), status_code=500, mimetype="application/json")
@@ -27,12 +27,12 @@ def generate_text_content_logic(template: dict, variable_values: dict) -> dict:
     api_version = os.environ.get("AZURE_OPENAI_API_VERSION")
     deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME")
 
-    prompt_template = template["settings"]["promptTemplate"]
-    system_prompt = prompt_template["systemPrompt"]
-    user_prompt = prompt_template["userPrompt"]
+    prompt_template = template["settings"]["prompt_template"]
+    system_prompt = prompt_template["system_prompt"]
+    user_prompt = prompt_template["user_prompt"]
     model = prompt_template["model"]
     temperature = prompt_template.get("temperature", 1)
-    max_tokens = prompt_template.get("maxTokens", 512)
+    max_tokens = prompt_template.get("max_tokens", 512)
 
     # Render user/system prompt with variable values
     for k, v in variable_values.items():

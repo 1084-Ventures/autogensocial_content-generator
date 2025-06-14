@@ -1,0 +1,20 @@
+[tool.black]
+line-length = 100
+target-version = "py311"
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+python_version = 3.11
+ignore_missing_imports = true
+strict = true
+
+[tool.flake8]
+max-line-length = 100
+extend-ignore = ["E203", "W503"]
+
+[tool.datamodel_code_generator]
+input = "../specs/openapi.yaml"
+input_file_type = "openapi"
+output = "generated_models/models.py"

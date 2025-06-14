@@ -5,7 +5,7 @@ import azure.functions as func
 from azure.cosmos import CosmosClient
 from azure.functions import Blueprint
 from shared.logger import structured_logger
-from shared.models.posting import PostingRequest, PostingResponse
+from generated_models.models import PostingRequest, PostingResponse
 
 posting_blueprint = Blueprint()
 
@@ -15,10 +15,10 @@ def post_content(req: func.HttpRequest) -> func.HttpResponse:
     try:
         data = req.get_json()
         posting_request = PostingRequest(**data)
-        brand_id = posting_request.brandId
-        image_url = posting_request.imageUrl
+        brand_id = posting_request.brand_id
+        image_url = posting_request.image_url
         content = posting_request.content
-        post_id = posting_request.postId
+        post_id = posting_request.post_id
 
         # Cosmos DB setup
         cosmos_url = os.environ["COSMOS_DB_CONNECTION_STRING"]

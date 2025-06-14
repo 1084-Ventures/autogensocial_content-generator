@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw
 from shared.utils.font_utils import load_font
 from shared.utils.text_box_utils import calculate_text_box
 from shared.fonts import FONT_PATHS
-from shared.models.image import ImageContent, VisualStyle, Font, Color, Background, TextOverlay, Container, Format
+from generated_models.models import ImageContent, VisualStyle, Font, Color, Background, TextOverlay, Container, Format
 import io
 import traceback
 

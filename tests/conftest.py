@@ -49,22 +49,22 @@ def sample_template():
     return {
         "id": "template-123",
         "metadata": {
-            "createdDate": "2025-04-11T13:00:00Z",
-            "updatedDate": "2025-04-11T13:00:00Z",
-            "isActive": True
+            "created_date": "2025-04-11T13:00:00Z",
+            "updated_date": "2025-04-11T13:00:00Z",
+            "is_active": True
         },
-        "templateInfo": {
+        "template_info": {
             "name": "Test Template",
-            "brandId": "brand-123",
-            "contentType": "post"
+            "brand_id": "brand-123",
+            "content_type": "post"
         },
         "settings": {
-            "promptTemplate": {
-                "systemPrompt": "You are a content creator",
-                "userPrompt": "Create content about {topic}",
+            "prompt_template": {
+                "system_prompt": "You are a content creator",
+                "user_prompt": "Create content about {topic}",
                 "model": "gpt-4",
                 "temperature": 0.7,
-                "maxTokens": 1000,
+                "max_tokens": 1000,
                 "variables": [
                     {
                         "name": "topic",
@@ -72,12 +72,12 @@ def sample_template():
                     }
                 ]
             },
-            "contentStrategy": {
-                "targetAudience": "tech enthusiasts",
+            "content_strategy": {
+                "target_audience": "tech enthusiasts",
                 "tone": "professional",
                 "keywords": ["tech", "innovation"],
-                "hashtagStrategy": "relevant industry hashtags",
-                "callToAction": "Learn more on our website"
+                "hashtag_strategy": "relevant industry hashtags",
+                "call_to_action": "Learn more on our website"
             }
         }
     }
@@ -87,14 +87,14 @@ def sample_brand():
     return {
         "id": "brand-123",
         "metadata": {
-            "createdDate": "2025-04-11T13:00:00Z",
-            "updatedDate": "2025-04-11T13:00:00Z",
-            "isActive": True
+            "created_date": "2025-04-11T13:00:00Z",
+            "updated_date": "2025-04-11T13:00:00Z",
+            "is_active": True
         },
-        "brandInfo": {
+        "brand_info": {
             "name": "Test Brand",
             "description": "A test brand",
-            "userId": "user-123"
+            "user_id": "user-123"
         }
     }
 

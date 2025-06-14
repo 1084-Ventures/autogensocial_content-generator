@@ -25,10 +25,10 @@ def main(documents: func.DocumentList) -> None:
         for doc in documents:
             try:
                 template_id = doc.get("id")
-                brand_id = doc.get("templateInfo", {}).get("brandId") or doc.get("brandId")
+                brand_id = doc.get("template_info", {}).get("brand_id") or doc.get("brand_id")
                 schedule = doc.get("schedule", {})
-                days_of_week = schedule.get("daysOfWeek", [])
-                time_slots = schedule.get("timeSlots", [])
+                days_of_week = schedule.get("days_of_week", [])
+                time_slots = schedule.get("time_slots", [])
                 if not (template_id and brand_id and days_of_week and time_slots):
                     continue
                 for day in days_of_week:
@@ -44,8 +44,8 @@ def main(documents: func.DocumentList) -> None:
                         queue_conn_str = os.environ["AzureWebJobsStorage"]
                         queue_client = QueueClient.from_connection_string(queue_conn_str, queue_name)
                         payload = {
-                            "templateId": template_id,
-                            "brandId": brand_id,
+                            "template_id": template_id,
+                            "brand_id": brand_id,
                             "schedule": schedule
                         }
                         queue_client.send_message(json.dumps(payload), visibility_timeout=delay_seconds)
