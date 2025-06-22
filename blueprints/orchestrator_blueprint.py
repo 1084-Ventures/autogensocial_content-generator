@@ -231,7 +231,9 @@ def generate_content_orchestrator(req: func.HttpRequest) -> func.HttpResponse:
         if image_url_for_generation:
             response_body["mediaSearchImageUrl"] = image_url_for_generation
 
-        return func.HttpResponse(json.dumps(response_body), status_code=201, mimetype="application/json")
+        # Use OrchestratorResponse for serialization
+        response_model = OrchestratorResponse(status="success", result=response_body)
+        return func.HttpResponse(response_model.model_dump_json(), status_code=201, mimetype="application/json")
     except Exception as e:
         structured_logger.error("Orchestrator error", error=str(e))
         return func.HttpResponse(json.dumps({"error": str(e)}), status_code=500, mimetype="application/json")

@@ -121,7 +121,8 @@ def post_content(req: func.HttpRequest) -> func.HttpResponse:
             "instagramPostId": instagram_post_id,
             "postStatus": post_status
         }
-        return func.HttpResponse(json.dumps(result), status_code=200, mimetype="application/json")
+        response_model = PostingResponse(status=post_status, post_url=instagram_post_id, error=instagram_post_result.get("error") if isinstance(instagram_post_result, dict) else None)
+        return func.HttpResponse(response_model.model_dump_json(), status_code=200, mimetype="application/json")
     except Exception as e:
         structured_logger.error("Posting blueprint error", error=str(e))
         return func.HttpResponse(json.dumps({"error": str(e)}), status_code=500, mimetype="application/json")

@@ -13,7 +13,9 @@ def generate_text_content(req: func.HttpRequest) -> func.HttpResponse:
         data = req.get_json()
         text_content_request = AzureOpenAIGenerateContentRequest(**data)
         content = generate_text_content_logic(text_content_request.template, text_content_request.variableValues or {})
-        return func.HttpResponse(json.dumps(content), status_code=200, mimetype="application/json")
+        from generated_models.models import AzureOpenAIGenerateContentResponse
+        response_model = AzureOpenAIGenerateContentResponse(**content)
+        return func.HttpResponse(response_model.model_dump_json(), status_code=200, mimetype="application/json")
     except Exception as e:
         return func.HttpResponse(json.dumps({"error": str(e)}), status_code=500, mimetype="application/json")
 
